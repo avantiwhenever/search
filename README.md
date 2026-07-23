@@ -63,7 +63,7 @@ Four ranking strategies, each a `SearchStrategy` implementation:
 - [x] **M2 — Embeddings + semantic search + eval.** `EmbeddingService`
       (ONNX + tokenizer, CLS-pool, normalize, BGE query-prefix handling),
       `dense_vector` field, `SemanticSearchStrategy`, second results row.
-- [ ] **M3 — Hybrid + RRF + eval.** `RrfFusionService`,
+- [x] **M3 — Hybrid + RRF + eval.** `RrfFusionService`,
       `HybridRrfSearchStrategy`, sweep of the RRF constant, third results row.
 - [ ] **M4 — Cross-encoder rerank + eval.** `RerankerService`,
       `HybridRerankStrategy`, fourth results row, latency measurement.
@@ -78,9 +78,9 @@ Target results table (to be filled in as milestones land):
 
 | Strategy | nDCG@10 | MRR | Recall@10 | Recall@50 | Precision@10 | p95 latency |
 |---|---|---|---|---|---|---|
-| Lexical (BM25) | 0.6707 | 0.8793 | 0.0615 | 0.2485 | 0.7942 | 1186ms |
-| Semantic (bge-small-en-v1.5) | 0.6990 | 0.8872 | 0.0580 | 0.2303 | 0.7988 | 2347ms |
-| Hybrid (RRF) | | | | | | |
+| Lexical (BM25) | 0.6707 | 0.8793 | 0.0615 | 0.2485 | 0.7942 | 733ms |
+| Semantic (bge-small-en-v1.5) | 0.6990 | 0.8872 | 0.0580 | 0.2303 | 0.7988 | 825ms |
+| Hybrid (RRF, k=60) | 0.7308 | 0.9226 | 0.0638 | 0.2506 | 0.8431 | 1247ms |
 | Hybrid + Cross-Encoder Rerank | | | | | | |
 
 See `RESULTS.md` (regenerate with `./scripts/run-eval.sh`) for the

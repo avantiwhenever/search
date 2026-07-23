@@ -7,7 +7,9 @@ import com.avanti.search.common.WandsDataset;
 import com.avanti.search.common.WandsQuery;
 import com.avanti.search.inference.EmbeddingService;
 import com.avanti.search.retrieval.ElasticsearchClients;
+import com.avanti.search.retrieval.HybridRrfSearchStrategy;
 import com.avanti.search.retrieval.LexicalSearchStrategy;
+import com.avanti.search.retrieval.RrfFusionService;
 import com.avanti.search.retrieval.ScoredResult;
 import com.avanti.search.retrieval.SearchStrategy;
 import com.avanti.search.retrieval.SemanticSearchStrategy;
@@ -25,6 +27,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -53,6 +56,7 @@ public class EvalCli implements Callable<Integer> {
     private static final int NDCG_K = 10;
     private static final int PRECISION_K = 10;
     private static final int RECALL_SMALL_K = 10;
+    private static final List<Integer> RRF_K_CANDIDATES = List.of(10, 20, 40, 60, 100, 200);
 
     @Option(names = "--dataset-dir", defaultValue = "dataset")
     private Path datasetDir;
@@ -83,17 +87,25 @@ public class EvalCli implements Callable<Integer> {
 
         try (ElasticsearchClient client = ElasticsearchClients.create(host);
              EmbeddingService embeddingService = new EmbeddingService(modelDir)) {
-            List<SearchStrategy> strategies = List.of(
-                    new LexicalSearchStrategy(client),
-                    new SemanticSearchStrategy(client, embeddingService)
-            );
+            LexicalSearchStrategy lexical = new LexicalSearchStrategy(client);
+            SemanticSearchStrategy semantic = new SemanticSearchStrategy(client, embeddingService);
 
             List<StrategySummary> summaries = new ArrayList<>();
-            for (SearchStrategy strategy : strategies) {
-                summaries.add(evaluate(strategy, dataset));
-            }
+            summaries.add(evaluate(lexical, dataset));
+            summaries.add(evaluate(semantic, dataset));
 
-            writeResultsMarkdown(summaries);
+            List<RrfSweepRow> sweep = sweepRrfConstant(lexical, semantic, dataset);
+            writeSweepCsv(sweep);
+            int bestK = sweep.stream()
+                    .max(Comparator.comparingDouble(RrfSweepRow::ndcgAt10))
+                    .orElseThrow()
+                    .k();
+            log.info("RRF sweep complete; best k={} by nDCG@10", bestK);
+
+            HybridRrfSearchStrategy hybrid = new HybridRrfSearchStrategy(lexical, semantic, TOP_K, bestK);
+            summaries.add(evaluate(hybrid, dataset));
+
+            writeResultsMarkdown(summaries, sweep);
         }
 
         return 0;
@@ -133,18 +145,87 @@ public class EvalCli implements Callable<Integer> {
         List<ScoredResult> results = strategy.search(query.queryText(), TOP_K);
         long elapsedMs = (System.nanoTime() - start) / 1_000_000;
 
-        List<String> rankedIds = results.stream().map(ScoredResult::productId).toList();
+        return new QueryEvalResult(toMetrics(query.queryId(), results, judgments), elapsedMs);
+    }
 
-        QueryMetrics metrics = new QueryMetrics(
-                query.queryId(),
+    private QueryMetrics toMetrics(String queryId, List<ScoredResult> results, Map<String, RelevanceGrade> judgments) {
+        List<String> rankedIds = results.stream().map(ScoredResult::productId).toList();
+        return new QueryMetrics(
+                queryId,
                 MetricsCalculator.ndcgAtK(rankedIds, judgments, NDCG_K),
                 MetricsCalculator.reciprocalRank(rankedIds, judgments),
                 MetricsCalculator.recallAtK(rankedIds, judgments, RECALL_SMALL_K),
                 MetricsCalculator.recallAtK(rankedIds, judgments, TOP_K),
                 MetricsCalculator.precisionAtK(rankedIds, judgments, PRECISION_K)
         );
+    }
 
-        return new QueryEvalResult(metrics, elapsedMs);
+    /**
+     * Sweeps candidate RRF constants against the same lexical/semantic
+     * candidate lists rather than re-querying Elasticsearch/ONNX per
+     * candidate — fusion is pure in-memory arithmetic, so this makes the
+     * sweep cheap regardless of how many k values are tried.
+     */
+    private List<RrfSweepRow> sweepRrfConstant(SearchStrategy lexical, SearchStrategy semantic, WandsDataset dataset)
+            throws InterruptedException {
+        log.info("Sweeping RRF constant candidates: {}", RRF_K_CANDIDATES);
+        List<WandsQuery> queries = dataset.queries();
+        List<QueryCandidates> perQueryCandidates = new ArrayList<>();
+
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            List<Future<QueryCandidates>> futures = new ArrayList<>();
+            for (WandsQuery query : queries) {
+                futures.add(executor.submit(() -> new QueryCandidates(
+                        query.queryId(),
+                        lexical.search(query.queryText(), TOP_K),
+                        semantic.search(query.queryText(), TOP_K),
+                        dataset.judgmentsFor(query.queryId()))));
+            }
+            for (Future<QueryCandidates> future : futures) {
+                try {
+                    perQueryCandidates.add(future.get());
+                } catch (ExecutionException e) {
+                    throw new RuntimeException("Candidate generation failed during RRF sweep", e.getCause());
+                }
+            }
+        }
+
+        List<RrfSweepRow> sweep = new ArrayList<>();
+        for (int k : RRF_K_CANDIDATES) {
+            List<QueryMetrics> perQuery = new ArrayList<>();
+            for (QueryCandidates candidates : perQueryCandidates) {
+                List<ScoredResult> fused = RrfFusionService.fuse(
+                        List.of(candidates.lexicalResults(), candidates.semanticResults()), k);
+                perQuery.add(toMetrics(candidates.queryId(), fused, candidates.judgments()));
+            }
+            StrategySummary summary = StrategySummary.aggregate("k=" + k, perQuery, List.of());
+            sweep.add(new RrfSweepRow(k, summary.ndcgAt10(), summary.mrr(), summary.recallAt10(),
+                    summary.recallAt50(), summary.precisionAt10()));
+        }
+        return sweep;
+    }
+
+    private record QueryCandidates(String queryId, List<ScoredResult> lexicalResults,
+                                    List<ScoredResult> semanticResults, Map<String, RelevanceGrade> judgments) {
+    }
+
+    private record RrfSweepRow(int k, double ndcgAt10, double mrr, double recallAt10,
+                                double recallAt50, double precisionAt10) {
+    }
+
+    private void writeSweepCsv(List<RrfSweepRow> sweep) throws IOException {
+        Path path = resultsDir.resolve("rrf-sweep.csv");
+        CSVFormat format = CSVFormat.Builder.create(CSVFormat.DEFAULT)
+                .setHeader("rrf_k", "ndcg_at_10", "mrr", "recall_at_10", "recall_at_50", "precision_at_10")
+                .build();
+
+        try (Writer writer = Files.newBufferedWriter(path, StandardCharsets.UTF_8);
+             CSVPrinter printer = new CSVPrinter(writer, format)) {
+            for (RrfSweepRow row : sweep) {
+                printer.printRecord(row.k(), row.ndcgAt10(), row.mrr(), row.recallAt10(), row.recallAt50(), row.precisionAt10());
+            }
+        }
+        log.info("Wrote RRF sweep results to {}", path);
     }
 
     private void writePerQueryCsv(String strategyName, List<QueryMetrics> perQuery) throws IOException {
@@ -166,7 +247,7 @@ public class EvalCli implements Callable<Integer> {
         log.info("Wrote per-query metrics to {}", path);
     }
 
-    private void writeResultsMarkdown(List<StrategySummary> summaries) throws IOException {
+    private void writeResultsMarkdown(List<StrategySummary> summaries, List<RrfSweepRow> sweep) throws IOException {
         StringBuilder sb = new StringBuilder();
         sb.append("# Evaluation Results\n\n");
         sb.append("Offline IR evaluation of each ranking strategy against the WANDS relevance\n");
@@ -184,6 +265,22 @@ public class EvalCli implements Callable<Integer> {
                     .append(" | ").append(s.p95LatencyMs())
                     .append(" |\n");
         }
+
+        sb.append("\n## RRF constant sweep\n\n");
+        sb.append("Fusion of the same lexical/semantic candidate lists at each k (see `results/rrf-sweep.csv`); ");
+        sb.append("the Hybrid row above uses whichever k scored highest on nDCG@10.\n\n");
+        sb.append("| k | nDCG@10 | MRR | Recall@10 | Recall@50 | Precision@10 |\n");
+        sb.append("|---|---|---|---|---|---|\n");
+        for (RrfSweepRow row : sweep) {
+            sb.append("| ").append(row.k())
+                    .append(" | ").append(format(row.ndcgAt10()))
+                    .append(" | ").append(format(row.mrr()))
+                    .append(" | ").append(format(row.recallAt10()))
+                    .append(" | ").append(format(row.recallAt50()))
+                    .append(" | ").append(format(row.precisionAt10()))
+                    .append(" |\n");
+        }
+
         Files.writeString(resultsMdPath, sb.toString());
         log.info("Wrote {}", resultsMdPath);
     }
