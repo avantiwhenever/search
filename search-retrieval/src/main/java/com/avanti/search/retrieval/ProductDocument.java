@@ -7,8 +7,10 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  * The Elasticsearch document shape for a product — field names match
  * products-mapping.json, which is why this doesn't just reuse WandsProduct
  * (whose accessor names are camelCase Java convention, not the mapping's
- * snake_case). Only used for indexing; searches fetch just the doc id
- * (see SearchConstants / LexicalSearchStrategy) since that's all callers need.
+ * snake_case). Ranking strategies fetch just the doc id and score (see
+ * SearchConstants / LexicalSearchStrategy) since that's all a ranking
+ * decision needs; ProductLookup deserializes this for the few callers that
+ * need product content instead — reranking and the API's display layer.
  */
 public record ProductDocument(
         @JsonProperty("product_id") String productId,

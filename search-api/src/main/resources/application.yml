@@ -1,0 +1,12 @@
+server:
+  port: 8080
+
+search:
+  elasticsearch:
+    host: ${SEARCH_ELASTICSEARCH_HOST:http://localhost:9200}
+  models:
+    embedding-dir: ${SEARCH_MODELS_EMBEDDING_DIR:models/bge-small-en-v1.5}
+    reranker-dir: ${SEARCH_MODELS_RERANKER_DIR:models/ms-marco-MiniLM-L-6-v2}
+  hybrid:
+    rrf-k: 60
+    candidate-pool-size: 50

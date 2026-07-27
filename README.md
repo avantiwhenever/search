@@ -43,7 +43,44 @@ search/
 `search-retrieval` is framework-agnostic and shared by both `search-api` and
 `search-eval`, so the evaluation harness scores the *exact same* strategy code
 the API serves — no risk of eval measuring something different from
-production.
+production:
+
+```mermaid
+flowchart TB
+    subgraph offline["Offline — one-time / periodic"]
+        direction LR
+        wands[("WANDS CSVs<br/>product / query / label")] --> ingest["search-ingestion<br/>+ EmbeddingService"]
+    end
+
+    ingest --> es[("Elasticsearch<br/>products index<br/>BM25 + dense_vector")]
+
+    subgraph strategies["search-retrieval — shared by API and eval"]
+        direction LR
+        lex["Lexical<br/>(BM25)"] --> hyb["Hybrid<br/>(RRF fusion)"]
+        sem["Semantic<br/>(kNN)"] --> hyb
+        hyb --> rerank["Hybrid + Rerank<br/>(cross-encoder)"]
+    end
+
+    es --> lex
+    es --> sem
+
+    subgraph online["Online — search-api"]
+        direction LR
+        rest["REST API<br/>/api/search, /compare"]
+        demo["Static demo page"] --> rest
+        swagger["Swagger UI"] --> rest
+    end
+
+    rerank --> rest
+
+    subgraph offlineeval["Offline — search-eval"]
+        direction LR
+        labels[("label.csv<br/>relevance judgments")] --> evalcli["EvalCli<br/>480 queries × 4 strategies"]
+        evalcli --> results[("RESULTS.md<br/>+ results/*.csv")]
+    end
+
+    rerank --> evalcli
+```
 
 Four ranking strategies, each a `SearchStrategy` implementation:
 1. **Lexical** — BM25 (`multi_match` across name/class/category/description/features)
@@ -67,7 +104,7 @@ Four ranking strategies, each a `SearchStrategy` implementation:
       `HybridRrfSearchStrategy`, sweep of the RRF constant, third results row.
 - [x] **M4 — Cross-encoder rerank + eval.** `RerankerService`,
       `HybridRerankStrategy`, fourth results row, latency measurement.
-- [ ] **M5 — Polish.** Swagger UI, `/api/search/compare` side-by-side
+- [x] **M5 — Polish.** Swagger UI, `/api/search/compare` side-by-side
       endpoint, minimal demo surface, Dockerized `search-api`, architecture
       diagram, full write-up.
 - [ ] **M6+ — ongoing.** Server-side RRF comparison, query understanding,
@@ -119,7 +156,13 @@ each spawning their own full-width thread pool and thrashing it.
 ## Local setup
 
 Prerequisites (installed via Homebrew): JDK 26, Maven, Colima + Docker +
-Docker Compose plugin.
+Docker Compose plugin. Colima's default VM allocation (2 CPUs) is too little
+once `search-api`'s reranker is under any load — a single cross-encoder
+forward pass can occupy the one active core long enough that the *same
+container's* outbound call to Elasticsearch misses its 1s connect timeout,
+surfacing as a flaky 500 that looks like a networking bug but is actually
+CPU starvation. `colima start --cpu 6 --memory 8` (or edit
+`~/.colima/default/colima.yaml`) fixes it.
 
 ```bash
 # start Elasticsearch + Kibana
@@ -140,7 +183,28 @@ java -jar search-ingestion/target/search-ingestion.jar
 
 # run the offline eval harness, writing RESULTS.md + results/*.csv
 ./scripts/run-eval.sh
+
+# run the API (locally, or via docker compose — see below)
+mvn -q -pl search-api -am package -DskipTests
+java -jar search-api/target/search-api.jar
 ```
+
+Then visit `http://localhost:8080/index.html` for the search-comparison demo
+page, or `http://localhost:8080/swagger-ui.html` to call `/api/search` and
+`/api/search/compare` directly.
+
+To run `search-api` in Docker instead (build stage matches the local
+toolchain: Maven 3.9.16 + JDK 26; runtime is a glibc-based JRE image, since
+ONNX Runtime's and the tokenizer's native libraries aren't musl-compatible):
+
+```bash
+docker compose up -d --build search-api
+```
+
+This mounts the already-downloaded `models/` directory read-only into the
+container rather than baking ~150MB of weights into the image, and points
+`SEARCH_ELASTICSEARCH_HOST` at the `elasticsearch` service by name — no
+extra configuration needed beyond having already run `download-models.sh`.
 
 Homebrew's `openjdk` formula is keg-only, so `java` may not be on `PATH`
 even after `brew install openjdk` — if `mvn`/`java` can't find a runtime,
@@ -148,3 +212,6 @@ set `JAVA_HOME` to `$(brew --prefix openjdk)/libexec/openjdk.jdk/Contents/Home`.
 
 Elasticsearch runs with security disabled (`xpack.security.enabled=false`)
 for local dev simplicity — not for production use.
+
+See [WRITEUP.md](WRITEUP.md) for the full narrative: what was tried at each
+milestone, what broke, and how the final numbers were arrived at.

@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Semantic Product Search — Strategy Comparison</title>
+<style>
+  :root {
+    --bg: #f7f5f1;
+    --surface: #ffffff;
+    --surface-alt: #efebe3;
+    --text: #211f1b;
+    --text-muted: #6b655c;
+    --accent: #0e6b64;
+    --accent-contrast: #ffffff;
+    --rank1: #c08a2e;
+    --rank1-bg: #fbf1de;
+    --border: #e2ddd3;
+    --shadow: 0 1px 2px rgba(33, 31, 27, 0.06), 0 4px 12px rgba(33, 31, 27, 0.05);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #171512;
+      --surface: #201d19;
+      --surface-alt: #2a2620;
+      --text: #edeae4;
+      --text-muted: #a39c90;
+      --accent: #3fbfb3;
+      --accent-contrast: #0a1817;
+      --rank1: #e0ac55;
+      --rank1-bg: #332a18;
+      --border: #34302a;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.25);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #171512;
+    --surface: #201d19;
+    --surface-alt: #2a2620;
+    --text: #edeae4;
+    --text-muted: #a39c90;
+    --accent: #3fbfb3;
+    --accent-contrast: #0a1817;
+    --rank1: #e0ac55;
+    --rank1-bg: #332a18;
+    --border: #34302a;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.25);
+  }
+  :root[data-theme="light"] {
+    --bg: #f7f5f1;
+    --surface: #ffffff;
+    --surface-alt: #efebe3;
+    --text: #211f1b;
+    --text-muted: #6b655c;
+    --accent: #0e6b64;
+    --accent-contrast: #ffffff;
+    --rank1: #c08a2e;
+    --rank1-bg: #fbf1de;
+    --border: #e2ddd3;
+    --shadow: 0 1px 2px rgba(33, 31, 27, 0.06), 0 4px 12px rgba(33, 31, 27, 0.05);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .mono {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 1.25rem 1.5rem;
+  }
+
+  .title-row {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.9rem;
+  }
+
+  h1 {
+    font-size: 1.3rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  .subtitle {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+  }
+
+  form {
+    display: flex;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  input[type="text"] {
+    flex: 1 1 320px;
+    min-width: 200px;
+    padding: 0.55rem 0.8rem;
+    font-size: 0.95rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  input[type="text"]:focus, input[type="number"]:focus, button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+
+  input[type="number"] {
+    width: 4.5rem;
+    padding: 0.55rem 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: inherit;
+  }
+
+  label.count-label {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    white-space: nowrap;
+  }
+
+  button {
+    padding: 0.55rem 1.1rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+    border: none;
+    border-radius: 8px;
+    background: var(--accent);
+    color: var(--accent-contrast);
+    cursor: pointer;
+  }
+
+  button:disabled { opacity: 0.6; cursor: default; }
+
+  main {
+    padding: 1.25rem 1.5rem 2.5rem;
+  }
+
+  .status {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    margin-bottom: 0.75rem;
+    min-height: 1.2em;
+  }
+  .status.error { color: #b3453f; }
+
+  .columns-scroller {
+    overflow-x: auto;
+    padding-bottom: 0.5rem;
+  }
+
+  .columns {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(260px, 1fr);
+    gap: 1rem;
+    min-width: min-content;
+  }
+
+  .column {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .column-header {
+    padding: 0.8rem 1rem;
+    background: var(--surface-alt);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .column-header .name {
+    font-weight: 700;
+    font-size: 0.95rem;
+    text-wrap: balance;
+  }
+
+  .column-header .meta {
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    margin-top: 0.15rem;
+  }
+
+  .card {
+    display: flex;
+    gap: 0.7rem;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border);
+    align-items: flex-start;
+  }
+  .card:last-child { border-bottom: none; }
+
+  .card.rank-1 {
+    background: var(--rank1-bg);
+  }
+
+  .rank {
+    flex: 0 0 auto;
+    width: 1.6rem;
+    height: 1.6rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: var(--surface-alt);
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    font-weight: 700;
+  }
+  .card.rank-1 .rank {
+    background: var(--rank1);
+    color: #2a1c04;
+  }
+
+  .card-body { min-width: 0; flex: 1 1 auto; }
+
+  .product-name {
+    font-size: 0.88rem;
+    font-weight: 600;
+    line-height: 1.3;
+    text-transform: capitalize;
+  }
+
+  .category {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    margin-top: 0.15rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .card-footer {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 0.3rem;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+  }
+
+  .score {
+    color: var(--text);
+  }
+
+  .empty, .placeholder {
+    padding: 2rem 1rem;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="title-row">
+    <h1>Semantic Product Search</h1>
+    <span class="subtitle">— strategy comparison over the WANDS furniture catalog</span>
+  </div>
+  <form id="search-form">
+    <input type="text" id="query" name="query" placeholder="Try: queen size platform bed frame" autocomplete="off" />
+    <label class="count-label" for="topK">top<input type="number" id="topK" name="topK" value="5" min="1" max="20" /></label>
+    <button type="submit" id="submit-button">Compare</button>
+  </form>
+</header>
+<main>
+  <div class="status" id="status"></div>
+  <div class="columns-scroller">
+    <div class="columns" id="columns">
+      <div class="placeholder">Enter a query above to compare Lexical, Semantic, Hybrid, and Reranked results side by side.</div>
+    </div>
+  </div>
+</main>
+<script>
+  const form = document.getElementById('search-form');
+  const statusEl = document.getElementById('status');
+  const columnsEl = document.getElementById('columns');
+  const submitButton = document.getElementById('submit-button');
+
+  function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (c) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+  }
+
+  function renderColumn(strategyName, results) {
+    const cards = results.length
+      ? results.map((r, i) => `
+        <div class="card${i === 0 ? ' rank-1' : ''}">
+          <div class="rank">${i + 1}</div>
+          <div class="card-body">
+            <div class="product-name">${escapeHtml(r.productName ?? r.productId)}</div>
+            <div class="category">${escapeHtml(r.categoryHierarchy ?? '')}</div>
+            <div class="card-footer">
+              <span>${r.averageRating != null ? '★ ' + r.averageRating.toFixed(1) + ' (' + (r.ratingCount ?? 0) + ')' : ''}</span>
+              <span class="score mono">${r.score.toFixed(3)}</span>
+            </div>
+          </div>
+        </div>`).join('')
+      : '<div class="empty">No results</div>';
+
+    return `
+      <div class="column">
+        <div class="column-header">
+          <div class="name">${escapeHtml(strategyName)}</div>
+          <div class="meta mono">${results.length} result${results.length === 1 ? '' : 's'}</div>
+        </div>
+        ${cards}
+      </div>`;
+  }
+
+  async function runCompare(query, topK) {
+    statusEl.className = 'status';
+    statusEl.textContent = 'Searching…';
+    submitButton.disabled = true;
+    const start = performance.now();
+    try {
+      const response = await fetch(`/api/search/compare?query=${encodeURIComponent(query)}&topK=${encodeURIComponent(topK)}`);
+      if (!response.ok) {
+        throw new Error(`Request failed (${response.status})`);
+      }
+      const data = await response.json();
+      const elapsedMs = Math.round(performance.now() - start);
+      columnsEl.innerHTML = Object.entries(data.resultsByStrategy)
+        .map(([name, results]) => renderColumn(name, results))
+        .join('');
+      statusEl.textContent = `"${data.query}" — ${elapsedMs}ms round-trip (includes the cross-encoder rerank column's real per-query cost)`;
+    } catch (err) {
+      statusEl.className = 'status error';
+      statusEl.textContent = err.message || 'Something went wrong.';
+    } finally {
+      submitButton.disabled = false;
+    }
+  }
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const query = document.getElementById('query').value.trim();
+    const topK = document.getElementById('topK').value || 5;
+    if (query) {
+      runCompare(query, topK);
+    }
+  });
+</script>
+</body>
+</html>
