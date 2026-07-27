@@ -14,17 +14,22 @@ public final class EmbeddingTextBuilder {
     }
 
     public static String build(WandsProduct product) {
-        StringBuilder text = new StringBuilder(product.productName());
-        if (product.productClass() != null) {
-            text.append(". ").append(product.productClass());
+        return build(product.productName(), product.productClass(), product.categoryHierarchy(), product.productDescription());
+    }
+
+    /** Same field composition as {@link #build(WandsProduct)}, for callers reading fields back from Elasticsearch rather than a WandsProduct (e.g. reranking). */
+    public static String build(String productName, String productClass, String categoryHierarchy, String productDescription) {
+        StringBuilder text = new StringBuilder(productName);
+        if (productClass != null) {
+            text.append(". ").append(productClass);
         }
-        if (product.categoryHierarchy() != null) {
+        if (categoryHierarchy != null) {
             // Source category hierarchies are inconsistently spaced around "/" (e.g. "Furniture / Beds"
             // vs "Furniture/Beds"), so collapse any surrounding whitespace rather than a plain replace.
-            text.append(". ").append(product.categoryHierarchy().replaceAll("\\s*/\\s*", " > "));
+            text.append(". ").append(categoryHierarchy.replaceAll("\\s*/\\s*", " > "));
         }
-        if (product.productDescription() != null) {
-            text.append(". ").append(truncate(product.productDescription(), MAX_DESCRIPTION_CHARS));
+        if (productDescription != null) {
+            text.append(". ").append(truncate(productDescription, MAX_DESCRIPTION_CHARS));
         }
         return text.toString();
     }

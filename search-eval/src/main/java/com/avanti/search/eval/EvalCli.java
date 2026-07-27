@@ -6,7 +6,9 @@ import com.avanti.search.common.WandsCsvLoader;
 import com.avanti.search.common.WandsDataset;
 import com.avanti.search.common.WandsQuery;
 import com.avanti.search.inference.EmbeddingService;
+import com.avanti.search.inference.RerankerService;
 import com.avanti.search.retrieval.ElasticsearchClients;
+import com.avanti.search.retrieval.HybridRerankStrategy;
 import com.avanti.search.retrieval.HybridRrfSearchStrategy;
 import com.avanti.search.retrieval.LexicalSearchStrategy;
 import com.avanti.search.retrieval.RrfFusionService;
@@ -45,6 +47,16 @@ import java.util.concurrent.Future;
  * M4: hybrid+rerank) — this file is re-run in full each time rather than
  * patching individual rows, so RESULTS.md can never go stale relative to
  * the strategies that actually exist.
+ *
+ * <p>Metrics (nDCG/MRR/recall/precision) are computed concurrently across
+ * all 480 queries — correct regardless of concurrency, and much faster.
+ * Latency is measured separately, serially, over a fixed-size sample —
+ * firing all 480 queries as one simultaneous burst would measure queueing
+ * delay behind that burst rather than realistic single-query serving
+ * latency, a gap that's small for the cheaper strategies but enormous for
+ * the reranker (a few seconds of genuine per-query cross-encoder work
+ * compounds into minutes of queueing once hundreds of queries pile up on
+ * one CPU at once).
  */
 @Command(name = "search-eval", mixinStandardHelpOptions = true,
         description = "Evaluates all implemented ranking strategies against WANDS relevance judgments.")
@@ -57,6 +69,7 @@ public class EvalCli implements Callable<Integer> {
     private static final int PRECISION_K = 10;
     private static final int RECALL_SMALL_K = 10;
     private static final List<Integer> RRF_K_CANDIDATES = List.of(10, 20, 40, 60, 100, 200);
+    private static final int LATENCY_SAMPLE_SIZE = 50;
 
     @Option(names = "--dataset-dir", defaultValue = "dataset")
     private Path datasetDir;
@@ -73,6 +86,9 @@ public class EvalCli implements Callable<Integer> {
     @Option(names = "--model-dir", description = "Directory containing the embedding model's model.onnx/tokenizer.json", defaultValue = "models/bge-small-en-v1.5")
     private Path modelDir;
 
+    @Option(names = "--reranker-model-dir", description = "Directory containing the reranker's model.onnx/tokenizer.json", defaultValue = "models/ms-marco-MiniLM-L-6-v2")
+    private Path rerankerModelDir;
+
     public static void main(String[] args) {
         int exitCode = new CommandLine(new EvalCli()).execute(args);
         System.exit(exitCode);
@@ -86,13 +102,15 @@ public class EvalCli implements Callable<Integer> {
         Files.createDirectories(resultsDir);
 
         try (ElasticsearchClient client = ElasticsearchClients.create(host);
-             EmbeddingService embeddingService = new EmbeddingService(modelDir)) {
+             EmbeddingService embeddingService = new EmbeddingService(modelDir);
+             RerankerService rerankerService = new RerankerService(rerankerModelDir)) {
             LexicalSearchStrategy lexical = new LexicalSearchStrategy(client);
             SemanticSearchStrategy semantic = new SemanticSearchStrategy(client, embeddingService);
+            List<WandsQuery> latencySample = selectLatencySample(dataset.queries(), LATENCY_SAMPLE_SIZE);
 
             List<StrategySummary> summaries = new ArrayList<>();
-            summaries.add(evaluate(lexical, dataset));
-            summaries.add(evaluate(semantic, dataset));
+            summaries.add(evaluate(lexical, dataset, latencySample));
+            summaries.add(evaluate(semantic, dataset, latencySample));
 
             List<RrfSweepRow> sweep = sweepRrfConstant(lexical, semantic, dataset);
             writeSweepCsv(sweep);
@@ -103,7 +121,10 @@ public class EvalCli implements Callable<Integer> {
             log.info("RRF sweep complete; best k={} by nDCG@10", bestK);
 
             HybridRrfSearchStrategy hybrid = new HybridRrfSearchStrategy(lexical, semantic, TOP_K, bestK);
-            summaries.add(evaluate(hybrid, dataset));
+            summaries.add(evaluate(hybrid, dataset, latencySample));
+
+            HybridRerankStrategy rerank = new HybridRerankStrategy(hybrid, client, rerankerService, TOP_K);
+            summaries.add(evaluate(rerank, dataset, latencySample));
 
             writeResultsMarkdown(summaries, sweep);
         }
@@ -111,41 +132,68 @@ public class EvalCli implements Callable<Integer> {
         return 0;
     }
 
-    private StrategySummary evaluate(SearchStrategy strategy, WandsDataset dataset) throws InterruptedException, IOException {
+    private StrategySummary evaluate(SearchStrategy strategy, WandsDataset dataset, List<WandsQuery> latencySample)
+            throws InterruptedException, IOException {
         log.info("Evaluating strategy: {}", strategy.name());
-        List<WandsQuery> queries = dataset.queries();
-        List<QueryMetrics> perQuery = new ArrayList<>();
-        List<Long> latenciesMs = new ArrayList<>();
-
-        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            List<Future<QueryEvalResult>> futures = new ArrayList<>();
-            for (WandsQuery query : queries) {
-                futures.add(executor.submit(() -> runOneQuery(strategy, query, dataset)));
-            }
-            for (Future<QueryEvalResult> future : futures) {
-                QueryEvalResult result;
-                try {
-                    result = future.get();
-                } catch (ExecutionException e) {
-                    throw new RuntimeException("Query evaluation failed for strategy " + strategy.name(), e.getCause());
-                }
-                perQuery.add(result.metrics());
-                latenciesMs.add(result.latencyMs());
-            }
-        }
-
+        List<QueryMetrics> perQuery = evaluateMetrics(strategy, dataset);
         writePerQueryCsv(strategy.name(), perQuery);
+
+        List<Long> latenciesMs = measureLatencies(strategy, latencySample);
         return StrategySummary.aggregate(strategy.name(), perQuery, latenciesMs);
     }
 
-    private QueryEvalResult runOneQuery(SearchStrategy strategy, WandsQuery query, WandsDataset dataset) {
+    private List<QueryMetrics> evaluateMetrics(SearchStrategy strategy, WandsDataset dataset) throws InterruptedException {
+        List<WandsQuery> queries = dataset.queries();
+        List<QueryMetrics> perQuery = new ArrayList<>();
+
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            List<Future<QueryMetrics>> futures = new ArrayList<>();
+            for (WandsQuery query : queries) {
+                futures.add(executor.submit(() -> runOneQuery(strategy, query, dataset)));
+            }
+            for (Future<QueryMetrics> future : futures) {
+                try {
+                    perQuery.add(future.get());
+                } catch (ExecutionException e) {
+                    throw new RuntimeException("Query evaluation failed for strategy " + strategy.name(), e.getCause());
+                }
+            }
+        }
+        return perQuery;
+    }
+
+    private QueryMetrics runOneQuery(SearchStrategy strategy, WandsQuery query, WandsDataset dataset) {
         Map<String, RelevanceGrade> judgments = dataset.judgmentsFor(query.queryId());
-
-        long start = System.nanoTime();
         List<ScoredResult> results = strategy.search(query.queryText(), TOP_K);
-        long elapsedMs = (System.nanoTime() - start) / 1_000_000;
+        return toMetrics(query.queryId(), results, judgments);
+    }
 
-        return new QueryEvalResult(toMetrics(query.queryId(), results, judgments), elapsedMs);
+    /**
+     * Serial (one query at a time), unlike evaluateMetrics — see class
+     * javadoc for why concurrent measurement would be misleading here.
+     */
+    private List<Long> measureLatencies(SearchStrategy strategy, List<WandsQuery> sampleQueries) {
+        strategy.search(sampleQueries.get(0).queryText(), TOP_K); // warm up, excluded from the sample
+
+        List<Long> latenciesMs = new ArrayList<>(sampleQueries.size());
+        for (WandsQuery query : sampleQueries) {
+            long start = System.nanoTime();
+            strategy.search(query.queryText(), TOP_K);
+            latenciesMs.add((System.nanoTime() - start) / 1_000_000);
+        }
+        return latenciesMs;
+    }
+
+    private static List<WandsQuery> selectLatencySample(List<WandsQuery> queries, int sampleSize) {
+        if (queries.size() <= sampleSize) {
+            return queries;
+        }
+        int step = queries.size() / sampleSize;
+        List<WandsQuery> sample = new ArrayList<>(sampleSize);
+        for (int i = 0; i < queries.size() && sample.size() < sampleSize; i += step) {
+            sample.add(queries.get(i));
+        }
+        return sample;
     }
 
     private QueryMetrics toMetrics(String queryId, List<ScoredResult> results, Map<String, RelevanceGrade> judgments) {
@@ -287,8 +335,5 @@ public class EvalCli implements Callable<Integer> {
 
     private static String format(double value) {
         return String.format(Locale.ROOT, "%.4f", value);
-    }
-
-    private record QueryEvalResult(QueryMetrics metrics, long latencyMs) {
     }
 }

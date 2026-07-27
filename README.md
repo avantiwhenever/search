@@ -22,7 +22,7 @@ measurably improves search quality, with the numbers to back it up.
 | Search engine | **Elasticsearch** | Considered OpenSearch first (its native RRF fusion is fully open-source, vs. Elasticsearch's being Platinum-gated). But this project hand-rolls RRF fusion client-side in Java rather than using either engine's built-in fusion endpoint (see below), so that licensing distinction turned out not to matter. Elasticsearch was chosen as the more resume-recognizable name; free/Basic license fully covers what's needed here (BM25 + `dense_vector`/kNN). |
 | Hybrid fusion | Hand-rolled Reciprocal Rank Fusion (RRF) in Java, not a built-in engine endpoint | More demoable and independently unit-testable than flipping a config flag — it's the artifact that proves understanding of the algorithm, and it gives the eval harness full control to sweep the RRF constant. |
 | Embedding model | `BAAI/bge-small-en-v1.5` (384-dim), via pre-exported ONNX weights from `Xenova/bge-small-en-v1.5` | Purpose-built for retrieval, small, and requires no local Python export step. Unlike most sentence-embedding models, BGE is trained with CLS-token pooling (first token of `last_hidden_state`) rather than mean pooling, and needs an asymmetric instruction prefix on queries only, not documents — both easy to get wrong silently since a mean-pooled embedding still "works," just worse; documented in `EmbeddingService`. |
-| Reranker | `cross-encoder/ms-marco-MiniLM-L-6-v2`, via `Xenova/ms-marco-MiniLM-L-6-v2` | Standard MS MARCO cross-encoder, small enough to rerank ~50 candidates per query in well under 100ms on CPU when batched. |
+| Reranker | `cross-encoder/ms-marco-MiniLM-L-6-v2`, via `Xenova/ms-marco-MiniLM-L-6-v2`'s **INT8-quantized** ONNX export | Standard MS MARCO cross-encoder. Scoring a 50-candidate pool is one forward pass over a batch of 50 (query, document) pairs — real single-query cost measured at ~1.3s p95 even quantized (quantization roughly halved it from the fp32 export's ~3s), nowhere near "well under 100ms"; a materially heavier workload than the embedding model's batch-of-1 query encode, so it gets the INT8 export while the embedding model stays fp32 (quantizing that would change every stored vector, invalidating the already-recorded M1–M3 numbers). |
 | Tokenization in Java | `ai.djl.huggingface:tokenizers` (standalone, not the full DJL engine) | The one piece Java lacks natively — loads `tokenizer.json` directly via JNI binding to the Rust `tokenizers` library, paired with raw ONNX Runtime for the forward pass. |
 | Build tool | Maven, multi-module reactor | Declarative XML dependency graphs are easy for a reviewer to skim; no build-script logic to audit. |
 
@@ -65,7 +65,7 @@ Four ranking strategies, each a `SearchStrategy` implementation:
       `dense_vector` field, `SemanticSearchStrategy`, second results row.
 - [x] **M3 — Hybrid + RRF + eval.** `RrfFusionService`,
       `HybridRrfSearchStrategy`, sweep of the RRF constant, third results row.
-- [ ] **M4 — Cross-encoder rerank + eval.** `RerankerService`,
+- [x] **M4 — Cross-encoder rerank + eval.** `RerankerService`,
       `HybridRerankStrategy`, fourth results row, latency measurement.
 - [ ] **M5 — Polish.** Swagger UI, `/api/search/compare` side-by-side
       endpoint, minimal demo surface, Dockerized `search-api`, architecture
@@ -78,10 +78,10 @@ Target results table (to be filled in as milestones land):
 
 | Strategy | nDCG@10 | MRR | Recall@10 | Recall@50 | Precision@10 | p95 latency |
 |---|---|---|---|---|---|---|
-| Lexical (BM25) | 0.6707 | 0.8793 | 0.0615 | 0.2485 | 0.7942 | 733ms |
-| Semantic (bge-small-en-v1.5) | 0.6990 | 0.8872 | 0.0580 | 0.2303 | 0.7988 | 825ms |
-| Hybrid (RRF, k=60) | 0.7308 | 0.9226 | 0.0638 | 0.2506 | 0.8431 | 1247ms |
-| Hybrid + Cross-Encoder Rerank | | | | | | |
+| Lexical (BM25) | 0.6707 | 0.8793 | 0.0615 | 0.2485 | 0.7942 | 2ms |
+| Semantic (bge-small-en-v1.5) | 0.6990 | 0.8872 | 0.0580 | 0.2303 | 0.7988 | 7ms |
+| Hybrid (RRF, k=60) | 0.7308 | 0.9226 | 0.0638 | 0.2506 | 0.8431 | 8ms |
+| Hybrid + Cross-Encoder Rerank | 0.7456 | 0.9015 | 0.0642 | 0.2506 | 0.8358 | 1288ms |
 
 See `RESULTS.md` (regenerate with `./scripts/run-eval.sh`) for the
 canonical, always-current version of this table plus per-query CSVs
@@ -101,6 +101,20 @@ double-spaced text and was caught by a unit test.
 `product_features` (pipe-delimited attribute:value pairs) is indexed as a
 separate lexical field but deliberately excluded from the embedding text —
 attribute noise dilutes sentence-embedding quality more than it helps.
+
+`search-eval` measures p95 latency serially, one query at a time over a
+fixed 50-query sample — separately from the metrics computation, which
+still runs all 480 queries concurrently since that's just correctness, not
+timing. Firing all 480 queries at once as a single burst was the original
+design, and it's fine for the cheap strategies, but for the reranker
+(~1.3s of genuine per-query cross-encoder work) it measured queueing delay
+behind the burst, not realistic single-query latency — a first pass showed
+a nonsensical multi-minute p95 that was actually ~480 queries stacked up
+behind each other on one CPU, not the model being slow. `RerankerService`
+also pins its ONNX session to a single intra-op thread and gates concurrent
+forward passes with a semaphore sized to the core count, so that concurrent
+callers (e.g. multiple simultaneous API requests) share the CPU instead of
+each spawning their own full-width thread pool and thrashing it.
 
 ## Local setup
 
