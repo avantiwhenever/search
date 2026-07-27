@@ -48,10 +48,15 @@ public class SearchController {
     public CompareResult compare(
             @RequestParam String query,
             @RequestParam(defaultValue = "10") int topK) {
-        Map<String, List<ProductResult>> resultsByStrategy = new LinkedHashMap<>();
+        Map<String, StrategyResult> resultsByStrategy = new LinkedHashMap<>();
         for (StrategyType type : StrategyType.values()) {
             SearchStrategy searchStrategy = strategiesByType.get(type);
-            resultsByStrategy.put(searchStrategy.name(), toProductResults(searchStrategy.search(query, topK)));
+
+            long start = System.nanoTime();
+            List<ScoredResult> results = searchStrategy.search(query, topK);
+            long latencyMs = (System.nanoTime() - start) / 1_000_000;
+
+            resultsByStrategy.put(searchStrategy.name(), new StrategyResult(latencyMs, toProductResults(results)));
         }
         return new CompareResult(query, resultsByStrategy);
     }
