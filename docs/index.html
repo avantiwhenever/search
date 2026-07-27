@@ -1,0 +1,637 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Semantic Product Search — Strategy Comparison (Snapshot Demo)</title>
+<meta name="description" content="Real captured results comparing Lexical, Semantic, Hybrid, and Cross-Encoder Reranked search over the WANDS furniture catalog." />
+<style>
+  :root {
+    --bg: #f7f5f1;
+    --surface: #ffffff;
+    --surface-alt: #efebe3;
+    --text: #211f1b;
+    --text-muted: #6b655c;
+    --accent: #0e6b64;
+    --accent-contrast: #ffffff;
+    --rank1: #c08a2e;
+    --rank1-bg: #fbf1de;
+    --border: #e2ddd3;
+    --banner-bg: #eef2ea;
+    --banner-text: #3d5a3a;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #171512;
+      --surface: #201d19;
+      --surface-alt: #2a2620;
+      --text: #edeae4;
+      --text-muted: #a39c90;
+      --accent: #3fbfb3;
+      --accent-contrast: #0a1817;
+      --rank1: #e0ac55;
+      --rank1-bg: #332a18;
+      --border: #34302a;
+      --banner-bg: #1e2a1c;
+      --banner-text: #9fd399;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #171512;
+    --surface: #201d19;
+    --surface-alt: #2a2620;
+    --text: #edeae4;
+    --text-muted: #a39c90;
+    --accent: #3fbfb3;
+    --accent-contrast: #0a1817;
+    --rank1: #e0ac55;
+    --rank1-bg: #332a18;
+    --border: #34302a;
+    --banner-bg: #1e2a1c;
+    --banner-text: #9fd399;
+  }
+  :root[data-theme="light"] {
+    --bg: #f7f5f1;
+    --surface: #ffffff;
+    --surface-alt: #efebe3;
+    --text: #211f1b;
+    --text-muted: #6b655c;
+    --accent: #0e6b64;
+    --accent-contrast: #ffffff;
+    --rank1: #c08a2e;
+    --rank1-bg: #fbf1de;
+    --border: #e2ddd3;
+    --banner-bg: #eef2ea;
+    --banner-text: #3d5a3a;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .mono {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  a { color: var(--accent); }
+
+  .snapshot-banner {
+    background: var(--banner-bg);
+    color: var(--banner-text);
+    padding: 0.6rem 1.5rem;
+    font-size: 0.82rem;
+    text-align: center;
+  }
+  .snapshot-banner a { color: inherit; font-weight: 600; text-decoration: underline; }
+
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 1.25rem 1.5rem;
+  }
+
+  .title-row {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.9rem;
+  }
+
+  h1 {
+    font-size: 1.3rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  .subtitle {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+  }
+
+  .controls {
+    display: flex;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  select {
+    flex: 1 1 320px;
+    min-width: 220px;
+    padding: 0.55rem 0.8rem;
+    font-size: 0.95rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  select:focus, button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+
+  main {
+    padding: 1.25rem 1.5rem 2.5rem;
+  }
+
+  .status {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    margin-bottom: 0.75rem;
+    min-height: 1.2em;
+  }
+
+  .pick-note {
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    margin: 0.9rem 0 0;
+  }
+
+  .columns-scroller {
+    overflow-x: auto;
+    padding-bottom: 0.5rem;
+  }
+
+  .columns {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(260px, 1fr);
+    gap: 1rem;
+    min-width: min-content;
+  }
+
+  .column {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .column.picked {
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+  }
+
+  .column-header {
+    padding: 0.8rem 1rem;
+    background: var(--surface-alt);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .column-header .name-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+
+  .column-header .name {
+    font-weight: 700;
+    font-size: 0.95rem;
+    text-wrap: balance;
+  }
+
+  .column-header .latency {
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    white-space: nowrap;
+  }
+
+  .column-header .description {
+    color: var(--text-muted);
+    font-size: 0.76rem;
+    margin-top: 0.3rem;
+    line-height: 1.35;
+  }
+
+  .column-header .meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    margin-top: 0.4rem;
+  }
+
+  .ndcg-badge {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.25rem;
+    background: var(--rank1-bg);
+    color: var(--rank1);
+    border-radius: 999px;
+    padding: 0.1rem 0.5rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+  }
+
+  .pick-button {
+    margin: 0.7rem 1rem 0.9rem;
+    padding: 0.45rem 0.7rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    background: var(--surface-alt);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+    align-self: stretch;
+  }
+  .pick-button:hover { border-color: var(--accent); }
+  .column.picked .pick-button {
+    background: var(--accent);
+    color: var(--accent-contrast);
+    border-color: var(--accent);
+  }
+
+  .card {
+    display: flex;
+    gap: 0.7rem;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border);
+    align-items: flex-start;
+  }
+  .card:last-child { border-bottom: none; }
+
+  .card.rank-1 {
+    background: var(--rank1-bg);
+  }
+
+  .rank {
+    flex: 0 0 auto;
+    width: 1.6rem;
+    height: 1.6rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: var(--surface-alt);
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    font-weight: 700;
+  }
+  .card.rank-1 .rank {
+    background: var(--rank1);
+    color: #2a1c04;
+  }
+
+  .card-body { min-width: 0; flex: 1 1 auto; }
+
+  .product-name {
+    font-size: 0.88rem;
+    font-weight: 600;
+    line-height: 1.3;
+    text-transform: capitalize;
+  }
+
+  .category {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    margin-top: 0.15rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .card-footer {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 0.3rem;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+  }
+
+  .score {
+    color: var(--text);
+  }
+
+  footer {
+    padding: 1.5rem;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    border-top: 1px solid var(--border);
+  }
+</style>
+</head>
+<body>
+<div class="snapshot-banner">
+  📸 Static snapshot — these four results were captured once from a locally-running instance, not a live search.
+  <a href="https://github.com/avantiwhenever/search">Run it yourself</a> or read the <a href="https://github.com/avantiwhenever/search/blob/main/WRITEUP.md">full write-up</a>.
+</div>
+<header>
+  <div class="title-row">
+    <h1>Semantic Product Search</h1>
+    <span class="subtitle">— strategy comparison over the WANDS furniture catalog</span>
+  </div>
+  <div class="controls">
+    <select id="query-select"></select>
+  </div>
+</header>
+<main>
+  <div class="status" id="status"></div>
+  <div class="columns-scroller">
+    <div class="columns" id="columns"></div>
+  </div>
+  <p class="pick-note" id="pick-note" hidden>Click "This looks best" under whichever column you'd pick — it's just for you, nothing is saved or sent anywhere.</p>
+</main>
+<footer>
+  Four ranking strategies, same query, same catalog: Lexical (BM25) → Semantic (dense kNN) → Hybrid (RRF fusion) → Hybrid + Cross-Encoder Rerank.
+  Source, offline evaluation methodology (nDCG@10/MRR/Recall/Precision against 480 real WANDS queries), and the live demo app are all in the
+  <a href="https://github.com/avantiwhenever/search">GitHub repo</a>.
+</footer>
+<script>
+  // Captured once via `curl localhost:8080/api/search/compare?...` against a locally-running
+  // instance of this project's search-api — see docs/data/*.json for the raw captures and
+  // scripts/capture-demo-snapshots.sh for how to regenerate this block.
+  const QUERY_DATA = {
+  "queen size platform bed frame": {
+    "resultsByStrategy": {
+      "Lexical (BM25)": {
+        "latencyMs": 14,
+        "results": [
+          { "productId": "28631", "score": 55.39969, "productName": "twin size bed frame platform", "productClass": null, "categoryHierarchy": "Furniture / Bedroom Furniture / Beds & Headboards / Beds", "averageRating": null, "ratingCount": null },
+          { "productId": "1984", "score": 45.961903, "productName": "adjustable-size bed frame", "productClass": "Bed Frames|Beds", "categoryHierarchy": null, "averageRating": 4.5, "ratingCount": 2213 },
+          { "productId": "2048", "score": 43.79096, "productName": "giancarlo queen bed frame", "productClass": "Bed Frames|Beds", "categoryHierarchy": "Furniture / Bedroom Furniture / Beds & Headboards / Beds / Queen Size Beds", "averageRating": 4.5, "ratingCount": 509 },
+          { "productId": "34580", "score": 42.65634, "productName": "joyce adjustable-size bed frame", "productClass": "Bed Frames", "categoryHierarchy": null, "averageRating": 4.5, "ratingCount": 2091 },
+          { "productId": "17158", "score": 42.576744, "productName": "stromsburg queen platform bed", "productClass": "Beds", "categoryHierarchy": "Furniture / Bedroom Furniture / Beds & Headboards / Beds / Queen Size Beds", "averageRating": 4.0, "ratingCount": 776 }
+        ]
+      },
+      "Semantic (bge-small-en-v1.5)": {
+        "latencyMs": 29,
+        "results": [
+          { "productId": "6151", "score": 0.9260466, "productName": "16 '' steel bed frame", "productClass": "Bed Frames|Beds", "categoryHierarchy": "Furniture / Bedroom Furniture / Beds & Headboards / Beds / Queen Size Beds", "averageRating": 4.5, "ratingCount": 39 },
+          { "productId": "37752", "score": 0.9137088, "productName": "guerra 38 '' platform bed", "productClass": "Bed Frames|Beds", "categoryHierarchy": null, "averageRating": 4.5, "ratingCount": 206 },
+          { "productId": "37750", "score": 0.9112432, "productName": "grubb platform bed", "productClass": "Bed Frames|Beds", "categoryHierarchy": null, "averageRating": 4.5, "ratingCount": 853 },
+          { "productId": "38301", "score": 0.90865105, "productName": "sinead queen upholstered platform bed", "productClass": "Beds", "categoryHierarchy": "Furniture / Bedroom Furniture / Beds & Headboards / Beds", "averageRating": 4.5, "ratingCount": 262 },
+          { "productId": "8851", "score": 0.9086144, "productName": "alagn platform bed", "productClass": "Beds", "categoryHierarchy": "Furniture / Bedroom Furniture / Beds & Headboards / Beds / Queen Size Beds", "averageRating": 5.0, "ratingCount": 16 }
+        ]
+      },
+      "Hybrid (RRF, k=60)": {
+        "latencyMs": 24,
+        "results": [
+          { "productId": "17289", "score": 0.03007688828584351, "productName": "masonville queen platform bed", "productClass": "Beds", "categoryHierarchy": "Furniture / Bedroom Furniture / Beds & Headboards / Beds", "averageRating": 3.5, "ratingCount": 241 },
+          { "productId": "17158", "score": 0.02967032967032967, "productName": "stromsburg queen platform bed", "productClass": "Beds", "categoryHierarchy": "Furniture / Bedroom Furniture / Beds & Headboards / Beds / Queen Size Beds", "averageRating": 4.0, "ratingCount": 776 },
+          { "productId": "28631", "score": 0.02938045560996381, "productName": "twin size bed frame platform", "productClass": null, "categoryHierarchy": "Furniture / Bedroom Furniture / Beds & Headboards / Beds", "averageRating": null, "ratingCount": null },
+          { "productId": "39620", "score": 0.028068137824235385, "productName": "rennan queen upholstered platform bed", "productClass": "Beds", "categoryHierarchy": "Furniture / Bedroom Furniture / Beds & Headboards / Beds / Queen Size Beds", "averageRating": 4.5, "ratingCount": 130 },
+          { "productId": "38301", "score": 0.027730294396961064, "productName": "sinead queen upholstered platform bed", "productClass": "Beds", "categoryHierarchy": "Furniture / Bedroom Furniture / Beds & Headboards / Beds", "averageRating": 4.5, "ratingCount": 262 }
+        ]
+      },
+      "Hybrid + Cross-Encoder Rerank": {
+        "latencyMs": 1498,
+        "results": [
+          { "productId": "13832", "score": 8.323826789855957, "productName": "juillac queen tufted upholstered low profile storage platform bed", "productClass": "Beds", "categoryHierarchy": "Furniture / Bedroom Furniture / Beds & Headboards / Beds / Queen Size Beds", "averageRating": 4.5, "ratingCount": 43 },
+          { "productId": "37752", "score": 8.313230514526367, "productName": "guerra 38 '' platform bed", "productClass": "Bed Frames|Beds", "categoryHierarchy": null, "averageRating": 4.5, "ratingCount": 206 },
+          { "productId": "17158", "score": 8.2046480178833, "productName": "stromsburg queen platform bed", "productClass": "Beds", "categoryHierarchy": "Furniture / Bedroom Furniture / Beds & Headboards / Beds / Queen Size Beds", "averageRating": 4.0, "ratingCount": 776 },
+          { "productId": "37750", "score": 7.79624605178833, "productName": "grubb platform bed", "productClass": "Bed Frames|Beds", "categoryHierarchy": null, "averageRating": 4.5, "ratingCount": 853 },
+          { "productId": "10847", "score": 7.592227935791016, "productName": "calloway upholstered low profile storage platform bed", "productClass": "Beds", "categoryHierarchy": "Furniture / Bedroom Furniture / Beds & Headboards / Beds", "averageRating": 4.5, "ratingCount": 49 }
+        ]
+      }
+    }
+  },
+  "cozy reading chair for small apartment": {
+    "resultsByStrategy": {
+      "Lexical (BM25)": {
+        "latencyMs": 12,
+        "results": [
+          { "productId": "15789", "score": 36.480396, "productName": "cozy kids club chair and ottoman", "productClass": "Kids Chairs", "categoryHierarchy": "Baby & Kids / Toddler & Kids Playroom / Playroom Furniture / Toddler & Kids Chairs & Seating", "averageRating": 4.0, "ratingCount": 9 },
+          { "productId": "15792", "score": 30.316675, "productName": "cozy woodland kids sleeper", "productClass": "Kids Chairs", "categoryHierarchy": "Baby & Kids / Toddler & Kids Playroom / Playroom Furniture / Toddler & Kids Chairs & Seating", "averageRating": 5.0, "ratingCount": 1 },
+          { "productId": "38451", "score": 28.763971, "productName": "small bean bag chair & lounger", "productClass": "Bean Bags|Teen Lounge Furniture", "categoryHierarchy": "Furniture / Game Tables & Game Room Furniture / Bean Bag Chairs", "averageRating": 4.5, "ratingCount": 798 },
+          { "productId": "42382", "score": 28.763971, "productName": "small bean bag chair & lounger", "productClass": "Bean Bags", "categoryHierarchy": "Furniture / Game Tables & Game Room Furniture / Bean Bag Chairs / Black Bean Bag Chairs", "averageRating": 3.5, "ratingCount": 37 },
+          { "productId": "39930", "score": 26.488794, "productName": "wilsad 5 pieces dining room bar table set with 4 bar stools , sturdy and durable，water/ oil，small space/ small apartment/ kitchenette/ studio ( counter height , dark coffee )", "productClass": "Dining Table Sets", "categoryHierarchy": "Furniture / Kitchen & Dining Furniture / Dining Tables & Seating / Kitchen and Dining Sets", "averageRating": null, "ratingCount": null }
+        ]
+      },
+      "Semantic (bge-small-en-v1.5)": {
+        "latencyMs": 16,
+        "results": [
+          { "productId": "28476", "score": 0.8783987, "productName": "lanier 30 '' wide tufted papasan chair", "productClass": "Accent Chairs", "categoryHierarchy": "Furniture / Living Room Furniture / Chairs & Seating / Accent Chairs", "averageRating": 4.0, "ratingCount": 9 },
+          { "productId": "22548", "score": 0.872227, "productName": "esmund 20 '' wide tufted velvet side chair", "productClass": "Accent Chairs", "categoryHierarchy": "Furniture / Living Room Furniture / Chairs & Seating / Accent Chairs", "averageRating": 4.5, "ratingCount": 998 },
+          { "productId": "4285", "score": 0.8688839, "productName": "camerynn 30.8 '' wide armchair", "productClass": null, "categoryHierarchy": "Furniture / Living Room Furniture / Chairs & Seating / Accent Chairs", "averageRating": null, "ratingCount": null },
+          { "productId": "19273", "score": 0.8635529, "productName": "eldermain 24.75 '' wide velvet armchair", "productClass": "Accent Chairs", "categoryHierarchy": "Furniture / Living Room Furniture / Chairs & Seating / Accent Chairs", "averageRating": 4.0, "ratingCount": 1 },
+          { "productId": "15595", "score": 0.8630961, "productName": "chenley 23.6 '' wide polyester side chair", "productClass": "Accent Chairs", "categoryHierarchy": "Furniture / Living Room Furniture / Chairs & Seating / Accent Chairs", "averageRating": 4.5, "ratingCount": 9 }
+        ]
+      },
+      "Hybrid (RRF, k=60)": {
+        "latencyMs": 47,
+        "results": [
+          { "productId": "15789", "score": 0.01639344262295082, "productName": "cozy kids club chair and ottoman", "productClass": "Kids Chairs", "categoryHierarchy": "Baby & Kids / Toddler & Kids Playroom / Playroom Furniture / Toddler & Kids Chairs & Seating", "averageRating": 4.0, "ratingCount": 9 },
+          { "productId": "28476", "score": 0.01639344262295082, "productName": "lanier 30 '' wide tufted papasan chair", "productClass": "Accent Chairs", "categoryHierarchy": "Furniture / Living Room Furniture / Chairs & Seating / Accent Chairs", "averageRating": 4.0, "ratingCount": 9 },
+          { "productId": "15792", "score": 0.016129032258064516, "productName": "cozy woodland kids sleeper", "productClass": "Kids Chairs", "categoryHierarchy": "Baby & Kids / Toddler & Kids Playroom / Playroom Furniture / Toddler & Kids Chairs & Seating", "averageRating": 5.0, "ratingCount": 1 },
+          { "productId": "22548", "score": 0.016129032258064516, "productName": "esmund 20 '' wide tufted velvet side chair", "productClass": "Accent Chairs", "categoryHierarchy": "Furniture / Living Room Furniture / Chairs & Seating / Accent Chairs", "averageRating": 4.5, "ratingCount": 998 },
+          { "productId": "38451", "score": 0.015873015873015872, "productName": "small bean bag chair & lounger", "productClass": "Bean Bags|Teen Lounge Furniture", "categoryHierarchy": "Furniture / Game Tables & Game Room Furniture / Bean Bag Chairs", "averageRating": 4.5, "ratingCount": 798 }
+        ]
+      },
+      "Hybrid + Cross-Encoder Rerank": {
+        "latencyMs": 1354,
+        "results": [
+          { "productId": "10667", "score": 4.153008937835693, "productName": "ahriel 29 '' wide tufted lounge chair", "productClass": "Accent Chairs", "categoryHierarchy": "Furniture / Living Room Furniture / Chairs & Seating / Accent Chairs", "averageRating": null, "ratingCount": null },
+          { "productId": "29631", "score": 3.061886787414551, "productName": "guthrie 25.2 '' wide side chair", "productClass": null, "categoryHierarchy": "Furniture / Living Room Furniture / Chairs & Seating / Accent Chairs", "averageRating": 4.5, "ratingCount": 163 },
+          { "productId": "36087", "score": 1.9241580963134766, "productName": "electric power lift chair 160 degree recliner chair living room chair single sofa ergonomic with vibration lumbar heating 2 side pockets cup holders usb port", "productClass": "Massage Chairs|Recliners", "categoryHierarchy": "Furniture / Living Room Furniture / Chairs & Seating / Massage Chairs", "averageRating": null, "ratingCount": null },
+          { "productId": "21719", "score": 1.901605486869812, "productName": "aurelina 21.65 '' wide polyester armchair", "productClass": "Accent Chairs", "categoryHierarchy": "Furniture / Living Room Furniture / Chairs & Seating / Accent Chairs", "averageRating": null, "ratingCount": null },
+          { "productId": "28467", "score": 1.7542847394943237, "productName": "gismondo 17.5 '' wide polyester papasan chair", "productClass": "Accent Chairs", "categoryHierarchy": "Furniture / Living Room Furniture / Chairs & Seating / Accent Chairs", "averageRating": 4.0, "ratingCount": 35 }
+        ]
+      }
+    }
+  },
+  "modern oak dining table": {
+    "resultsByStrategy": {
+      "Lexical (BM25)": {
+        "latencyMs": 10,
+        "results": [
+          { "productId": "42944", "score": 41.00654, "productName": "lavonne solid oak dining table", "productClass": "Dining Tables", "categoryHierarchy": "Furniture / Kitchen & Dining Furniture / Dining Tables & Seating / Kitchen & Dining Tables", "averageRating": 4.5, "ratingCount": 10 },
+          { "productId": "4254", "score": 38.25524, "productName": "campania extendable solid oak dining table", "productClass": "Dining Tables", "categoryHierarchy": "Furniture / Kitchen & Dining Furniture / Dining Tables & Seating / Kitchen & Dining Tables / 8 + Seat Kitchen & Dining Tables", "averageRating": 5.0, "ratingCount": 27 },
+          { "productId": "27292", "score": 38.25524, "productName": "35.4 '' solid oak iron dining table", "productClass": "Dining Tables", "categoryHierarchy": "Furniture / Kitchen & Dining Furniture / Dining Tables & Seating / Kitchen & Dining Tables / 8 + Seat Kitchen & Dining Tables", "averageRating": null, "ratingCount": null },
+          { "productId": "27293", "score": 38.25524, "productName": "43.3 '' solid oak iron dining table", "productClass": "Dining Tables", "categoryHierarchy": "Furniture / Kitchen & Dining Furniture / Dining Tables & Seating / Kitchen & Dining Tables / 8 + Seat Kitchen & Dining Tables", "averageRating": null, "ratingCount": null },
+          { "productId": "34274", "score": 38.25524, "productName": "colyer reclaimed oak industrial dining table", "productClass": "Dining Tables", "categoryHierarchy": "Furniture / Kitchen & Dining Furniture / Dining Tables & Seating / Kitchen & Dining Tables / 4 Seat Kitchen & Dining Tables", "averageRating": null, "ratingCount": null }
+        ]
+      },
+      "Semantic (bge-small-en-v1.5)": {
+        "latencyMs": 15,
+        "results": [
+          { "productId": "22914", "score": 0.9088485, "productName": "denmark dining table", "productClass": "Dining Tables", "categoryHierarchy": "Furniture / Kitchen & Dining Furniture / Dining Tables & Seating / Kitchen & Dining Tables / 8 + Seat Kitchen & Dining Tables", "averageRating": null, "ratingCount": null },
+          { "productId": "17011", "score": 0.90468794, "productName": "orna extendable dining table", "productClass": null, "categoryHierarchy": "Furniture / Kitchen & Dining Furniture / Dining Tables & Seating / Kitchen & Dining Tables", "averageRating": 5.0, "ratingCount": 1 },
+          { "productId": "37331", "score": 0.90093714, "productName": "madiun dining table", "productClass": "Dining Tables", "categoryHierarchy": "Furniture / Kitchen & Dining Furniture / Dining Tables & Seating / Kitchen & Dining Tables", "averageRating": 4.5, "ratingCount": 11 },
+          { "productId": "1549", "score": 0.89761317, "productName": "gildo 36 '' rubber solid wood dining table", "productClass": "Dining Tables", "categoryHierarchy": "Furniture / Kitchen & Dining Furniture / Dining Tables & Seating / Kitchen & Dining Tables", "averageRating": 4.5, "ratingCount": 76 },
+          { "productId": "14115", "score": 0.8969023, "productName": "modern farmhouse solid wood dining table", "productClass": "Dining Tables", "categoryHierarchy": "Furniture / Kitchen & Dining Furniture / Dining Tables & Seating / Kitchen & Dining Tables / 6 Seat Kitchen & Dining Tables", "averageRating": null, "ratingCount": null }
+        ]
+      },
+      "Hybrid (RRF, k=60)": {
+        "latencyMs": 32,
+        "results": [
+          { "productId": "27292", "score": 0.030798389007344232, "productName": "35.4 '' solid oak iron dining table", "productClass": "Dining Tables", "categoryHierarchy": "Furniture / Kitchen & Dining Furniture / Dining Tables & Seating / Kitchen & Dining Tables / 8 + Seat Kitchen & Dining Tables", "averageRating": null, "ratingCount": null },
+          { "productId": "42944", "score": 0.03047794966520434, "productName": "lavonne solid oak dining table", "productClass": "Dining Tables", "categoryHierarchy": "Furniture / Kitchen & Dining Furniture / Dining Tables & Seating / Kitchen & Dining Tables", "averageRating": 4.5, "ratingCount": 10 },
+          { "productId": "27293", "score": 0.029910714285714284, "productName": "43.3 '' solid oak iron dining table", "productClass": "Dining Tables", "categoryHierarchy": "Furniture / Kitchen & Dining Furniture / Dining Tables & Seating / Kitchen & Dining Tables / 8 + Seat Kitchen & Dining Tables", "averageRating": null, "ratingCount": null },
+          { "productId": "14115", "score": 0.02964426877470356, "productName": "modern farmhouse solid wood dining table", "productClass": "Dining Tables", "categoryHierarchy": "Furniture / Kitchen & Dining Furniture / Dining Tables & Seating / Kitchen & Dining Tables / 6 Seat Kitchen & Dining Tables", "averageRating": null, "ratingCount": null },
+          { "productId": "36266", "score": 0.02904040404040404, "productName": "ferryhill extendable solid oak dining table", "productClass": "Dining Tables", "categoryHierarchy": "Furniture / Kitchen & Dining Furniture / Dining Tables & Seating / Kitchen & Dining Tables / 4 Seat Kitchen & Dining Tables", "averageRating": 4.0, "ratingCount": 110 }
+        ]
+      },
+      "Hybrid + Cross-Encoder Rerank": {
+        "latencyMs": 1404,
+        "results": [
+          { "productId": "17011", "score": 8.70898151397705, "productName": "orna extendable dining table", "productClass": null, "categoryHierarchy": "Furniture / Kitchen & Dining Furniture / Dining Tables & Seating / Kitchen & Dining Tables", "averageRating": 5.0, "ratingCount": 1 },
+          { "productId": "22914", "score": 8.348163604736328, "productName": "denmark dining table", "productClass": "Dining Tables", "categoryHierarchy": "Furniture / Kitchen & Dining Furniture / Dining Tables & Seating / Kitchen & Dining Tables / 8 + Seat Kitchen & Dining Tables", "averageRating": null, "ratingCount": null },
+          { "productId": "23840", "score": 6.855710983276367, "productName": "larkin solid wood dining table", "productClass": "Dining Tables", "categoryHierarchy": "Furniture / Kitchen & Dining Furniture / Dining Tables & Seating / Kitchen & Dining Tables", "averageRating": 4.5, "ratingCount": 586 },
+          { "productId": "19781", "score": 5.884899139404297, "productName": "5 piece dining bar table set counter height with 4 pub stool , modern compact breakfast table set of 4 with 3 storage shelf , perfect for small kitchen dining room oak finish", "productClass": null, "categoryHierarchy": "Furniture / Kitchen & Dining Furniture / Dining Tables & Seating / Kitchen and Dining Sets", "averageRating": null, "ratingCount": null },
+          { "productId": "28431", "score": 5.405832290649414, "productName": "brierley counter height dining table", "productClass": "Dining Tables", "categoryHierarchy": "Furniture / Kitchen & Dining Furniture / Dining Tables & Seating / Kitchen & Dining Tables", "averageRating": 4.5, "ratingCount": 48 }
+        ]
+      }
+    }
+  },
+  "outdoor patio furniture set": {
+    "resultsByStrategy": {
+      "Lexical (BM25)": {
+        "latencyMs": 11,
+        "results": [
+          { "productId": "37711", "score": 48.507977, "productName": "outdoor rattan patio furniture set", "productClass": "Outdoor Conversation Sets", "categoryHierarchy": "Outdoor / Outdoor & Patio Furniture / Patio Furniture Sets / Patio Conversation Sets", "averageRating": 4.5, "ratingCount": 2 },
+          { "productId": "25317", "score": 45.253376, "productName": "7 piece outdoor patio furniture set", "productClass": "Outdoor Conversation Sets", "categoryHierarchy": "Outdoor / Outdoor & Patio Furniture / Patio Furniture Sets / Patio Conversation Sets", "averageRating": 4.5, "ratingCount": 12 },
+          { "productId": "5924", "score": 43.784897, "productName": "outdoor patio furniture cover", "productClass": "Furniture Covers", "categoryHierarchy": "Storage & Organization / Garage & Outdoor Storage & Organization / Outdoor Covers / Patio Furniture Covers", "averageRating": 4.5, "ratingCount": 94 },
+          { "productId": "36054", "score": 38.227646, "productName": "estey outdoor rattan wicker patio dining table set , garden outdoor patio furniture sets in , 11 piece", "productClass": "Patio Dining Sets", "categoryHierarchy": "Outdoor / Outdoor & Patio Furniture / Patio Furniture Sets / Patio Dining Sets", "averageRating": 3.5, "ratingCount": 5 },
+          { "productId": "23969", "score": 37.909477, "productName": "patio outdoor rattan furniture 4 pieces", "productClass": "Outdoor Conversation Sets", "categoryHierarchy": "Outdoor / Outdoor & Patio Furniture / Patio Furniture Sets / Patio Conversation Sets", "averageRating": 1.0, "ratingCount": 1 }
+        ]
+      },
+      "Semantic (bge-small-en-v1.5)": {
+        "latencyMs": 20,
+        "results": [
+          { "productId": "39965", "score": 0.9375335, "productName": "suzy 3 piece bistro set with cushions", "productClass": "Patio Dining Sets", "categoryHierarchy": "Outdoor / Outdoor & Patio Furniture / Patio Furniture Sets / Patio Dining Sets", "averageRating": 4.5, "ratingCount": 238 },
+          { "productId": "7435", "score": 0.9352566, "productName": "chapelle 5 piece bistro set", "productClass": "Patio Dining Sets", "categoryHierarchy": "Outdoor / Outdoor & Patio Furniture / Patio Furniture Sets / Patio Dining Sets", "averageRating": null, "ratingCount": null },
+          { "productId": "30335", "score": 0.93212366, "productName": "merlyn 6-piece outdoor garden patio furniture", "productClass": "Outdoor Conversation Sets", "categoryHierarchy": "Outdoor / Outdoor & Patio Furniture / Patio Furniture Sets / Patio Conversation Sets", "averageRating": null, "ratingCount": null },
+          { "productId": "30338", "score": 0.931499, "productName": "newagen 4 piece cushioned outdoor patio pe rattan furniture set sectional garden sofa", "productClass": "Outdoor Conversation Sets", "categoryHierarchy": "Outdoor / Outdoor & Patio Furniture / Patio Furniture Sets / Patio Conversation Sets", "averageRating": null, "ratingCount": null },
+          { "productId": "39972", "score": 0.9309963, "productName": "3 piece outdoor bistro set all-weather table and chairs metal frame modern patio furniture for small space deck , lawn , porch garden , black", "productClass": "Patio Dining Sets", "categoryHierarchy": "Outdoor / Outdoor & Patio Furniture / Patio Furniture Sets / Patio Dining Sets", "averageRating": 4.5, "ratingCount": 16 }
+        ]
+      },
+      "Hybrid (RRF, k=60)": {
+        "latencyMs": 42,
+        "results": [
+          { "productId": "30335", "score": 0.02886002886002886, "productName": "merlyn 6-piece outdoor garden patio furniture", "productClass": "Outdoor Conversation Sets", "categoryHierarchy": "Outdoor / Outdoor & Patio Furniture / Patio Furniture Sets / Patio Conversation Sets", "averageRating": null, "ratingCount": null },
+          { "productId": "42450", "score": 0.028577260665441927, "productName": "4 pieces patio furniture set outdoor garden patio conversation sets poolside lawn chairs with glass coffee table porch furniture", "productClass": "Outdoor Conversation Sets", "categoryHierarchy": "Outdoor / Outdoor & Patio Furniture / Patio Furniture Sets / Patio Conversation Sets", "averageRating": null, "ratingCount": null },
+          { "productId": "14542", "score": 0.02786377708978328, "productName": "merlyn 6- piece outdoor garden patio furniture", "productClass": "Outdoor Conversation Sets", "categoryHierarchy": "Outdoor / Outdoor & Patio Furniture / Patio Furniture Sets / Patio Conversation Sets", "averageRating": null, "ratingCount": null },
+          { "productId": "29671", "score": 0.02761904761904762, "productName": "outdoor patio furniture set 5-piece wicker rattan sectional sofa set", "productClass": null, "categoryHierarchy": "Outdoor / Outdoor & Patio Furniture / Patio Furniture Sets / Patio Conversation Sets", "averageRating": 4.0, "ratingCount": 2 },
+          { "productId": "22104", "score": 0.023412698412698413, "productName": "premium steel patio bistro set , folding outdoor patio furniture sets , 3 piece patio set of foldable patio table and chairs , yellow", "productClass": "Patio Dining Sets", "categoryHierarchy": "Outdoor / Outdoor & Patio Furniture / Patio Furniture Sets / Patio Dining Sets", "averageRating": 4.5, "ratingCount": 51 }
+        ]
+      },
+      "Hybrid + Cross-Encoder Rerank": {
+        "latencyMs": 1364,
+        "results": [
+          { "productId": "29671", "score": 9.779988288879395, "productName": "outdoor patio furniture set 5-piece wicker rattan sectional sofa set", "productClass": null, "categoryHierarchy": "Outdoor / Outdoor & Patio Furniture / Patio Furniture Sets / Patio Conversation Sets", "averageRating": 4.0, "ratingCount": 2 },
+          { "productId": "39965", "score": 9.487709045410156, "productName": "suzy 3 piece bistro set with cushions", "productClass": "Patio Dining Sets", "categoryHierarchy": "Outdoor / Outdoor & Patio Furniture / Patio Furniture Sets / Patio Dining Sets", "averageRating": 4.5, "ratingCount": 238 },
+          { "productId": "7432", "score": 9.482749938964844, "productName": "auby 5 piece bistro set", "productClass": "Patio Dining Sets", "categoryHierarchy": "Outdoor / Outdoor & Patio Furniture / Patio Furniture Sets / Patio Dining Sets", "averageRating": 5.0, "ratingCount": 1 },
+          { "productId": "441", "score": 9.435017585754395, "productName": "mosaic outdoor 3-piece bistro set", "productClass": "Patio Dining Sets", "categoryHierarchy": "Outdoor / Outdoor & Patio Furniture / Patio Furniture Sets / Patio Dining Sets", "averageRating": 4.5, "ratingCount": 277 },
+          { "productId": "7435", "score": 9.361902236938477, "productName": "chapelle 5 piece bistro set", "productClass": "Patio Dining Sets", "categoryHierarchy": "Outdoor / Outdoor & Patio Furniture / Patio Furniture Sets / Patio Dining Sets", "averageRating": null, "ratingCount": null }
+        ]
+      }
+    }
+  }
+};
+
+  const statusEl = document.getElementById('status');
+  const columnsEl = document.getElementById('columns');
+  const pickNoteEl = document.getElementById('pick-note');
+  const selectEl = document.getElementById('query-select');
+
+  const STRATEGY_INFO = [
+    { match: 'lexical', description: 'Exact keyword matching (BM25) — finds products containing your literal words.', ndcg: 0.6707 },
+    { match: 'semantic', description: 'Dense vector search — finds conceptually similar products even without matching words.', ndcg: 0.6990 },
+    { match: 'rerank', description: 'Cross-encoder re-scores the hybrid results by reading your query against each product directly. Highest quality, most latency.', ndcg: 0.7456 },
+    { match: 'hybrid', description: 'Combines the lexical and semantic rankings above via Reciprocal Rank Fusion.', ndcg: 0.7308 },
+  ];
+
+  function strategyInfo(name) {
+    const lower = name.toLowerCase();
+    return STRATEGY_INFO.find((s) => lower.includes(s.match)) ?? { description: '', ndcg: null };
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (c) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+  }
+
+  function renderColumn(strategyName, strategyResult) {
+    const { latencyMs, results } = strategyResult;
+    const info = strategyInfo(strategyName);
+
+    const cards = results.length
+      ? results.map((r, i) => `
+        <div class="card${i === 0 ? ' rank-1' : ''}">
+          <div class="rank">${i + 1}</div>
+          <div class="card-body">
+            <div class="product-name">${escapeHtml(r.productName ?? r.productId)}</div>
+            <div class="category">${escapeHtml(r.categoryHierarchy ?? '')}</div>
+            <div class="card-footer">
+              <span>${r.averageRating != null ? '★ ' + r.averageRating.toFixed(1) + ' (' + (r.ratingCount ?? 0) + ')' : ''}</span>
+              <span class="score mono">${r.score.toFixed(3)}</span>
+            </div>
+          </div>
+        </div>`).join('')
+      : '<div class="empty">No results</div>';
+
+    return `
+      <div class="column" data-strategy="${escapeHtml(strategyName)}">
+        <div class="column-header">
+          <div class="name-row">
+            <div class="name">${escapeHtml(strategyName)}</div>
+            <div class="latency mono">${latencyMs}ms</div>
+          </div>
+          <div class="description">${escapeHtml(info.description)}</div>
+          <div class="meta">
+            <span class="mono">${results.length} result${results.length === 1 ? '' : 's'}</span>
+            ${info.ndcg != null ? `<span class="ndcg-badge">nDCG@10 ${info.ndcg.toFixed(4)}</span>` : ''}
+          </div>
+        </div>
+        ${cards}
+        <button type="button" class="pick-button">This looks best</button>
+      </div>`;
+  }
+
+  function wirePickButtons() {
+    const columns = columnsEl.querySelectorAll('.column');
+    columns.forEach((column) => {
+      column.querySelector('.pick-button').addEventListener('click', () => {
+        const alreadyPicked = column.classList.contains('picked');
+        columns.forEach((c) => c.classList.remove('picked'));
+        if (!alreadyPicked) {
+          column.classList.add('picked');
+        }
+      });
+    });
+  }
+
+  function renderQuery(query) {
+    const data = QUERY_DATA[query];
+    pickNoteEl.hidden = true;
+    columnsEl.innerHTML = Object.entries(data.resultsByStrategy)
+      .map(([name, strategyResult]) => renderColumn(name, strategyResult))
+      .join('');
+    wirePickButtons();
+    pickNoteEl.hidden = false;
+    statusEl.textContent = `"${query}" — per-column latency and result count shown above`;
+  }
+
+  Object.keys(QUERY_DATA).forEach((query) => {
+    const option = document.createElement('option');
+    option.value = query;
+    option.textContent = query;
+    selectEl.appendChild(option);
+  });
+  selectEl.addEventListener('change', () => renderQuery(selectEl.value));
+  renderQuery(selectEl.value);
+</script>
+</body>
+</html>

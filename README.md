@@ -6,6 +6,11 @@ thing: **retrieval and ranking quality** — hybrid lexical/semantic search plus
 cross-encoder reranking, proven with real offline IR evaluation (nDCG, MRR,
 Recall@k) rather than eyeballed results.
 
+**[Live snapshot demo →](https://avantiwhenever.github.io/search/)** — a
+few real, captured queries comparing all four strategies side by side
+(static GitHub Pages page, not a live backend — see [WRITEUP.md](WRITEUP.md)
+for the full narrative, or run it yourself locally per "Local setup" below).
+
 ## Why this project
 
 Most semantic-search portfolios are thin wrappers around a vector DB with no
