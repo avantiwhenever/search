@@ -9,7 +9,7 @@ Recall@k) rather than eyeballed results.
 **[Live snapshot demo →](https://avantiwhenever.github.io/search/)** — a
 few real, captured queries comparing all four strategies side by side
 (static GitHub Pages page, not a live backend — see [WRITEUP.md](WRITEUP.md)
-for the full narrative, or run it yourself locally per "Local setup" below).
+for the full narrative, or run it yourself locally per [HOWTO.md](HOWTO.md)).
 
 ## Why this project
 
@@ -132,38 +132,24 @@ under `results/`.
 
 ## CI
 
-Two separate GitHub Actions workflows, deliberately split by cost rather than
-combined into one:
+One GitHub Actions workflow:
 
 - **`.github/workflows/build.yml`** — `mvn test` on every push/PR. Fast,
   needs no Elasticsearch or models (the tests that do need them skip
   gracefully via `Assumptions.assumeTrue` when those aren't present).
-- **`.github/workflows/eval.yml`** — the real regression gate: ingests the
-  full ~43K-product catalog with real embeddings, runs all 480 WANDS queries
-  against all four strategies, and fails the job if any strategy's nDCG@10
-  drops below the floor in `ci/eval-baseline.json` (via `EvalCli
-  --baseline-file`, matched by pipeline position — Lexical/Semantic/Hybrid/
-  Rerank in that fixed order — not by exact strategy name, since Hybrid's
-  display name embeds whichever RRF constant that run's sweep picked). This
-  only runs on pushes to `main` and manual dispatch, not every PR commit,
-  because embedding 43K products on a shared CI runner is genuinely slow —
-  the repo being public means Actions minutes are free, but wall-clock time
-  isn't, so it doesn't belong on every commit.
 
-  The Elasticsearch data directory itself is cached between runs, keyed on a
-  hash of whatever actually determines the index's contents (the catalog,
-  the embedding model, the mapping, and the ingestion/text-building code) —
-  re-embedding all 43K products only happens when one of those changed, not
-  on every push. (Sampling only part of the catalog to speed this up instead
-  was considered and rejected: WANDS's relevance judgments are keyed to the
-  full ~43K products, so indexing a subset would starve most queries of
-  their judged-relevant results and tank recall/nDCG for reasons that have
-  nothing to do with ranking quality — a regression gate that fails for the
-  wrong reason isn't a gate worth having.) Elasticsearch runs via a plain
-  `docker run` in this workflow rather than the declarative `services:`
-  block specifically so the cache can be restored to its data directory
-  *before* the container starts — `services:` containers start before any
-  of a job's own steps run.
+The full-catalog regression eval (ingest all ~43K products with real
+embeddings, run all 480 WANDS queries against all four strategies, fail if
+any strategy's nDCG@10 drops below the floor in `ci/eval-baseline.json`) is
+**not** run in CI — embedding 43K products is genuinely slow, and that cost
+doesn't belong on a shared runner on every push. Run it locally instead:
+
+```
+./scripts/run-eval.sh --baseline-file ci/eval-baseline.json
+```
+
+against a local Elasticsearch instance (see `docker-compose.yml`). Omit
+`--baseline-file` to just regenerate `RESULTS.md` without gating.
 
 ## Data notes
 
@@ -196,63 +182,11 @@ each spawning their own full-width thread pool and thrashing it.
 
 ## Local setup
 
-Prerequisites (installed via Homebrew): JDK 26, Maven, Colima + Docker +
-Docker Compose plugin. Colima's default VM allocation (2 CPUs) is too little
-once `search-api`'s reranker is under any load — a single cross-encoder
-forward pass can occupy the one active core long enough that the *same
-container's* outbound call to Elasticsearch misses its 1s connect timeout,
-surfacing as a flaky 500 that looks like a networking bug but is actually
-CPU starvation. `colima start --cpu 6 --memory 8` (or edit
-`~/.colima/default/colima.yaml`) fixes it.
-
-```bash
-# start Elasticsearch + Kibana
-docker compose up -d
-
-# fetch the WANDS dataset into dataset/
-./scripts/download-dataset.sh
-
-# fetch the embedding model's ONNX weights + tokenizer into models/
-./scripts/download-models.sh
-
-# build + test everything
-mvn test
-
-# create the products index and bulk-index the catalog
-mvn -q -pl search-ingestion -am package -DskipTests
-java -jar search-ingestion/target/search-ingestion.jar
-
-# run the offline eval harness, writing RESULTS.md + results/*.csv
-./scripts/run-eval.sh
-
-# run the API (locally, or via docker compose — see below)
-mvn -q -pl search-api -am package -DskipTests
-java -jar search-api/target/search-api.jar
-```
-
-Then visit `http://localhost:8080/index.html` for the search-comparison demo
-page, or `http://localhost:8080/swagger-ui.html` to call `/api/search` and
-`/api/search/compare` directly.
-
-To run `search-api` in Docker instead (build stage matches the local
-toolchain: Maven 3.9.16 + JDK 26; runtime is a glibc-based JRE image, since
-ONNX Runtime's and the tokenizer's native libraries aren't musl-compatible):
-
-```bash
-docker compose up -d --build search-api
-```
-
-This mounts the already-downloaded `models/` directory read-only into the
-container rather than baking ~150MB of weights into the image, and points
-`SEARCH_ELASTICSEARCH_HOST` at the `elasticsearch` service by name — no
-extra configuration needed beyond having already run `download-models.sh`.
-
-Homebrew's `openjdk` formula is keg-only, so `java` may not be on `PATH`
-even after `brew install openjdk` — if `mvn`/`java` can't find a runtime,
-set `JAVA_HOME` to `$(brew --prefix openjdk)/libexec/openjdk.jdk/Contents/Home`.
-
-Elasticsearch runs with security disabled (`xpack.security.enabled=false`)
-for local dev simplicity — not for production use.
+See **[HOWTO.md](HOWTO.md)** for step-by-step instructions to get
+Elasticsearch, the WANDS catalog, and `search-api` running locally — each
+step includes how to verify it actually worked before moving to the next
+one (e.g. confirming `search-api` is up and pollable on `localhost:8080`),
+plus how to run everything via Docker Compose or from IntelliJ.
 
 See [WRITEUP.md](WRITEUP.md) for the full narrative: what was tried at each
 milestone, what broke, and how the final numbers were arrived at.

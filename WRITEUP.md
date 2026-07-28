@@ -3,9 +3,10 @@
 This is the long-form account of building a hybrid lexical/semantic product
 search engine over the WANDS furniture catalog, in Java, with every ranking
 stage measured against real relevance judgments rather than eyeballed. The
-[README](README.md) is the reference doc (setup, architecture, key-decisions
-table); this is the narrative — what was tried, what broke, and what the
-numbers actually showed at each stage.
+[README](README.md) is the reference doc (architecture, key-decisions
+table, CI); [HOWTO.md](HOWTO.md) has step-by-step local setup; this is the
+narrative — what was tried, what broke, and what the numbers actually
+showed at each stage.
 
 ## The premise
 
