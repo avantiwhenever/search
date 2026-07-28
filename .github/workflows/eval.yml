@@ -1,0 +1,97 @@
+name: Offline eval regression gate
+
+# Full-catalog eval: ingests all ~43K products with real embeddings and runs
+# all 480 WANDS queries against all four strategies, failing the job if any
+# strategy's nDCG@10 drops below ci/eval-baseline.json. This is genuinely
+# slow (embedding 43K products on a shared CI runner takes a while), so it
+# only runs on pushes to main and on manual dispatch, not on every PR commit
+# — see .github/workflows/build.yml for the fast unit-test gate that does
+# run on every push/PR.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    services:
+      elasticsearch:
+        image: docker.elastic.co/elasticsearch/elasticsearch:9.4.3
+        env:
+          discovery.type: single-node
+          xpack.security.enabled: "false"
+          xpack.security.http.ssl.enabled: "false"
+          ES_JAVA_OPTS: "-Xms1g -Xmx1g"
+        ports:
+          - 9200:9200
+        options: >-
+          --health-cmd "curl -sf http://localhost:9200/_cluster/health || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 26
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '26'
+
+      - name: Cache Maven dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-m2-
+
+      - name: Cache WANDS dataset
+        id: cache-dataset
+        uses: actions/cache@v4
+        with:
+          path: dataset
+          key: wands-dataset-${{ hashFiles('scripts/download-dataset.sh') }}
+
+      - name: Fetch WANDS dataset
+        if: steps.cache-dataset.outputs.cache-hit != 'true'
+        run: ./scripts/download-dataset.sh
+
+      - name: Cache ONNX models
+        id: cache-models
+        uses: actions/cache@v4
+        with:
+          path: models
+          key: onnx-models-${{ hashFiles('scripts/download-models.sh') }}
+
+      - name: Fetch ONNX models
+        if: steps.cache-models.outputs.cache-hit != 'true'
+        run: ./scripts/download-models.sh
+
+      - name: Build ingestion + eval jars
+        run: mvn -B -q -pl search-ingestion,search-eval -am package -DskipTests
+
+      - name: Wait for Elasticsearch
+        run: |
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:9200/_cluster/health && exit 0
+            sleep 2
+          done
+          echo "Elasticsearch did not become healthy in time" >&2
+          exit 1
+
+      - name: Ingest catalog (all ~43K products, with embeddings)
+        run: java -jar search-ingestion/target/search-ingestion.jar --recreate
+
+      - name: Run offline eval against the regression baseline
+        run: java -jar search-eval/target/search-eval.jar --baseline-file ci/eval-baseline.json
+
+      - name: Upload eval results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results
+          path: |
+            RESULTS.md
+            results/

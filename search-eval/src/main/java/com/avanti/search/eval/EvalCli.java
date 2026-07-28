@@ -89,6 +89,9 @@ public class EvalCli implements Callable<Integer> {
     @Option(names = "--reranker-model-dir", description = "Directory containing the reranker's model.onnx/tokenizer.json", defaultValue = "models/ms-marco-MiniLM-L-6-v2")
     private Path rerankerModelDir;
 
+    @Option(names = "--baseline-file", description = "Optional regression floor (see ci/eval-baseline.json) — if given, exits non-zero when any strategy's nDCG@10 falls below its floor")
+    private Path baselineFile;
+
     public static void main(String[] args) {
         int exitCode = new CommandLine(new EvalCli()).execute(args);
         System.exit(exitCode);
@@ -101,6 +104,7 @@ public class EvalCli implements Callable<Integer> {
 
         Files.createDirectories(resultsDir);
 
+        List<StrategySummary> summaries;
         try (ElasticsearchClient client = ElasticsearchClients.create(host);
              EmbeddingService embeddingService = new EmbeddingService(modelDir);
              RerankerService rerankerService = new RerankerService(rerankerModelDir)) {
@@ -108,7 +112,7 @@ public class EvalCli implements Callable<Integer> {
             SemanticSearchStrategy semantic = new SemanticSearchStrategy(client, embeddingService);
             List<WandsQuery> latencySample = selectLatencySample(dataset.queries(), LATENCY_SAMPLE_SIZE);
 
-            List<StrategySummary> summaries = new ArrayList<>();
+            summaries = new ArrayList<>();
             summaries.add(evaluate(lexical, dataset, latencySample));
             summaries.add(evaluate(semantic, dataset, latencySample));
 
@@ -127,6 +131,16 @@ public class EvalCli implements Callable<Integer> {
             summaries.add(evaluate(rerank, dataset, latencySample));
 
             writeResultsMarkdown(summaries, sweep);
+        }
+
+        if (baselineFile != null) {
+            EvalBaseline baseline = EvalBaseline.load(baselineFile);
+            List<String> failures = BaselineChecker.checkRegressions(summaries, baseline);
+            if (!failures.isEmpty()) {
+                failures.forEach(f -> log.error("REGRESSION: {}", f));
+                return 1;
+            }
+            log.info("All {} strategies met their baseline floor in {}", summaries.size(), baselineFile);
         }
 
         return 0;

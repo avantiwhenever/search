@@ -112,9 +112,10 @@ Four ranking strategies, each a `SearchStrategy` implementation:
 - [x] **M5 — Polish.** Swagger UI, `/api/search/compare` side-by-side
       endpoint, minimal demo surface, Dockerized `search-api`, architecture
       diagram, full write-up.
-- [ ] **M6+ — ongoing.** Server-side RRF comparison, query understanding,
-      learning-to-rank layer, alternate embedding models, CI-enforced eval,
-      observability.
+- **M6+ — ongoing.**
+  - [x] CI-enforced eval — see below.
+  - [ ] Server-side RRF comparison, query understanding, learning-to-rank
+        layer, alternate embedding models, observability.
 
 Target results table (to be filled in as milestones land):
 
@@ -128,6 +129,26 @@ Target results table (to be filled in as milestones land):
 See `RESULTS.md` (regenerate with `./scripts/run-eval.sh`) for the
 canonical, always-current version of this table plus per-query CSVs
 under `results/`.
+
+## CI
+
+Two separate GitHub Actions workflows, deliberately split by cost rather than
+combined into one:
+
+- **`.github/workflows/build.yml`** — `mvn test` on every push/PR. Fast,
+  needs no Elasticsearch or models (the tests that do need them skip
+  gracefully via `Assumptions.assumeTrue` when those aren't present).
+- **`.github/workflows/eval.yml`** — the real regression gate: ingests the
+  full ~43K-product catalog with real embeddings, runs all 480 WANDS queries
+  against all four strategies, and fails the job if any strategy's nDCG@10
+  drops below the floor in `ci/eval-baseline.json` (via `EvalCli
+  --baseline-file`, matched by pipeline position — Lexical/Semantic/Hybrid/
+  Rerank in that fixed order — not by exact strategy name, since Hybrid's
+  display name embeds whichever RRF constant that run's sweep picked). This
+  only runs on pushes to `main` and manual dispatch, not every PR commit,
+  because embedding 43K products on a shared CI runner is genuinely slow —
+  the repo being public means Actions minutes are free, but wall-clock time
+  isn't, so it doesn't belong on every commit.
 
 ## Data notes
 
