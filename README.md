@@ -150,6 +150,21 @@ combined into one:
   the repo being public means Actions minutes are free, but wall-clock time
   isn't, so it doesn't belong on every commit.
 
+  The Elasticsearch data directory itself is cached between runs, keyed on a
+  hash of whatever actually determines the index's contents (the catalog,
+  the embedding model, the mapping, and the ingestion/text-building code) —
+  re-embedding all 43K products only happens when one of those changed, not
+  on every push. (Sampling only part of the catalog to speed this up instead
+  was considered and rejected: WANDS's relevance judgments are keyed to the
+  full ~43K products, so indexing a subset would starve most queries of
+  their judged-relevant results and tank recall/nDCG for reasons that have
+  nothing to do with ranking quality — a regression gate that fails for the
+  wrong reason isn't a gate worth having.) Elasticsearch runs via a plain
+  `docker run` in this workflow rather than the declarative `services:`
+  block specifically so the cache can be restored to its data directory
+  *before* the container starts — `services:` containers start before any
+  of a job's own steps run.
+
 ## Data notes
 
 WANDS files have a `.csv` extension but are actually **tab-delimited**, and
