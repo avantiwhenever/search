@@ -18,3 +18,7 @@ dependency-reduced-pom.xml
 
 dataset/
 models/
+.learned-embedding-checkpoint-*.txt
+training/.venv/
+__pycache__/
+*.pyc

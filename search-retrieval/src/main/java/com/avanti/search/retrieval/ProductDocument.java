@@ -22,7 +22,8 @@ public record ProductDocument(
         @JsonProperty("rating_count") Integer ratingCount,
         @JsonProperty("average_rating") Double averageRating,
         @JsonProperty("review_count") Integer reviewCount,
-        @JsonProperty("embedding") float[] embedding
+        @JsonProperty("embedding") float[] embedding,
+        @JsonProperty("learned_embedding") float[] learnedEmbedding
 ) {
     public static ProductDocument from(WandsProduct product, float[] embedding) {
         return new ProductDocument(
@@ -35,7 +36,14 @@ public record ProductDocument(
                 product.ratingCount(),
                 product.averageRating(),
                 product.reviewCount(),
-                embedding
+                embedding,
+                null
         );
+    }
+
+    /** Used only by the optional --learned-model-dir ingestion pass (see Track B's tower comparison). */
+    public ProductDocument withLearnedEmbedding(float[] learnedEmbedding) {
+        return new ProductDocument(productId, productName, productClass, categoryHierarchy, productDescription,
+                productFeatures, ratingCount, averageRating, reviewCount, embedding, learnedEmbedding);
     }
 }

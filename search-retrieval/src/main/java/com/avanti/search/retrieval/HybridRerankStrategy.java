@@ -1,6 +1,5 @@
 package com.avanti.search.retrieval;
 
-import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import com.avanti.search.inference.RerankerService;
 
 import java.util.ArrayList;
@@ -12,18 +11,22 @@ import java.util.Map;
  * Rescores the hybrid strategy's candidate pool with the cross-encoder
  * reranker. Candidates without fetchable text (shouldn't happen against a
  * consistent index, but a strategy shouldn't throw over it) are scored as
- * -infinity so they sort last rather than breaking the batch.
+ * -infinity so they sort last rather than breaking the batch. Product text
+ * comes from the shared ProductFeatureCache (also used by
+ * NeuralRerankStrategy) rather than a guaranteed-fresh Elasticsearch fetch
+ * every request, so a product either strategy has already seen doesn't
+ * need a second round trip.
  */
 public final class HybridRerankStrategy implements SearchStrategy {
 
     private final SearchStrategy hybrid;
-    private final ElasticsearchClient client;
+    private final ProductFeatureCache featureCache;
     private final RerankerService rerankerService;
     private final int candidatePoolSize;
 
-    public HybridRerankStrategy(SearchStrategy hybrid, ElasticsearchClient client, RerankerService rerankerService, int candidatePoolSize) {
+    public HybridRerankStrategy(SearchStrategy hybrid, ProductFeatureCache featureCache, RerankerService rerankerService, int candidatePoolSize) {
         this.hybrid = hybrid;
-        this.client = client;
+        this.featureCache = featureCache;
         this.rerankerService = rerankerService;
         this.candidatePoolSize = candidatePoolSize;
     }
@@ -36,7 +39,7 @@ public final class HybridRerankStrategy implements SearchStrategy {
         }
 
         List<String> productIds = candidates.stream().map(ScoredResult::productId).toList();
-        Map<String, String> texts = ProductTextFetcher.fetchTexts(client, productIds);
+        Map<String, String> texts = ProductTextFetcher.fetchTexts(featureCache, productIds);
 
         List<String> documents = new ArrayList<>(candidates.size());
         for (ScoredResult candidate : candidates) {

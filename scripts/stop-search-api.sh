@@ -18,10 +18,10 @@ if docker compose ps -q search-api 2>/dev/null | grep -q .; then
   stopped=true
 fi
 
-pid=$(lsof -ti tcp:8080 2>/dev/null || true)
-if [ -n "${pid}" ]; then
-  echo "Killing local process on :8080 (pid ${pid})..."
-  kill "${pid}"
+pids=$(lsof -ti tcp:8080 2>/dev/null || true)
+if [ -n "${pids}" ]; then
+  echo "Killing local process(es) on :8080 (pid(s): $(echo "${pids}" | tr '\n' ' '))..."
+  echo "${pids}" | xargs kill
   stopped=true
 fi
 

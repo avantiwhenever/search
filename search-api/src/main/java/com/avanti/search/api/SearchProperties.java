@@ -8,12 +8,17 @@ import java.nio.file.Path;
 public record SearchProperties(
         Elasticsearch elasticsearch,
         Models models,
-        Hybrid hybrid
+        Hybrid hybrid,
+        FeatureCache featureCache
 ) {
     public record Elasticsearch(String host) {
     }
 
-    public record Models(Path embeddingDir, Path rerankerDir) {
+    public record Models(Path embeddingDir, Path rerankerDir, Path neuralRerankerDir, Path learnedTowerDir) {
+    }
+
+    /** Bounds ProductFeatureCache's size — default comfortably covers the whole ~43K-product catalog. */
+    public record FeatureCache(int maxSize) {
     }
 
     /**

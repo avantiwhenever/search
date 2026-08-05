@@ -1,8 +1,8 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="9. Stop search-api" type="ShConfigurationType" folderName="scripts">
+  <configuration default="false" name="9. Wait for search-api :8080" type="ShConfigurationType" folderName="scripts">
     <option name="SCRIPT_TEXT" value="" />
     <option name="INDEPENDENT_SCRIPT_PATH" value="true" />
-    <option name="SCRIPT_PATH" value="$PROJECT_DIR$/scripts/stop-search-api.sh" />
+    <option name="SCRIPT_PATH" value="$PROJECT_DIR$/scripts/wait-for-search-api.sh" />
     <option name="SCRIPT_OPTIONS" value="" />
     <option name="INDEPENDENT_SCRIPT_WORKING_DIRECTORY" value="true" />
     <option name="SCRIPT_WORKING_DIRECTORY" value="$PROJECT_DIR$" />
@@ -11,6 +11,7 @@
     <option name="INTERPRETER_OPTIONS" value="" />
     <option name="EXECUTE_IN_TERMINAL" value="true" />
     <option name="EXECUTE_SCRIPT_FILE" value="true" />
+    <envs />
     <method v="2" />
   </configuration>
 </component>

@@ -1,8 +1,8 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="5. Capture demo snapshots" type="ShConfigurationType" folderName="scripts">
+  <configuration default="false" name="4. Train neural reranker" type="ShConfigurationType" folderName="scripts">
     <option name="SCRIPT_TEXT" value="" />
     <option name="INDEPENDENT_SCRIPT_PATH" value="true" />
-    <option name="SCRIPT_PATH" value="$PROJECT_DIR$/scripts/capture-demo-snapshots.sh" />
+    <option name="SCRIPT_PATH" value="$PROJECT_DIR$/scripts/train-neural-reranker.sh" />
     <option name="SCRIPT_OPTIONS" value="" />
     <option name="INDEPENDENT_SCRIPT_WORKING_DIRECTORY" value="true" />
     <option name="SCRIPT_WORKING_DIRECTORY" value="$PROJECT_DIR$" />

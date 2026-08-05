@@ -1,6 +1,5 @@
 package com.avanti.search.retrieval;
 
-import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import com.avanti.search.common.EmbeddingTextBuilder;
 
 import java.util.HashMap;
@@ -13,14 +12,15 @@ public final class ProductTextFetcher {
     private ProductTextFetcher() {
     }
 
-    public static Map<String, String> fetchTexts(ElasticsearchClient client, List<String> productIds) {
-        Map<String, ProductDocument> documents = ProductLookup.fetchByIds(client, productIds);
+    /** Sources product fields from the shared ProductFeatureCache rather than a fresh Elasticsearch fetch every call. */
+    public static Map<String, String> fetchTexts(ProductFeatureCache featureCache, List<String> productIds) {
+        Map<String, CachedProductFeatures> features = featureCache.getBatch(productIds);
 
         Map<String, String> texts = new HashMap<>();
-        for (Map.Entry<String, ProductDocument> entry : documents.entrySet()) {
-            ProductDocument doc = entry.getValue();
+        for (Map.Entry<String, CachedProductFeatures> entry : features.entrySet()) {
+            CachedProductFeatures product = entry.getValue();
             texts.put(entry.getKey(), EmbeddingTextBuilder.build(
-                    doc.productName(), doc.productClass(), doc.categoryHierarchy(), doc.productDescription()));
+                    product.productName(), product.productClass(), product.categoryHierarchy(), product.productDescription()));
         }
         return texts;
     }

@@ -39,7 +39,7 @@ Six-module Maven reactor:
 search/
 ├── search-common/      domain models + WANDS CSV parsing (no framework deps)
 ├── search-inference/   ONNX Runtime + tokenizer wrappers — embedding & reranker services
-├── search-retrieval/   Elasticsearch client + 4 pluggable SearchStrategy impls + RRF fusion
+├── search-retrieval/   Elasticsearch client + 6 pluggable SearchStrategy impls + RRF fusion
 ├── search-ingestion/   CLI: index creation + bulk indexing with embeddings
 ├── search-api/         thin Spring Boot REST API over search-retrieval
 └── search-eval/        CLI: offline IR evaluation harness against label.csv
@@ -64,10 +64,13 @@ flowchart TB
         lex["Lexical<br/>(BM25)"] --> hyb["Hybrid<br/>(RRF fusion)"]
         sem["Semantic<br/>(kNN)"] --> hyb
         hyb --> rerank["Hybrid + Rerank<br/>(cross-encoder)"]
+        hyb --> neural["Neural Rerank<br/>(MLP, cached features)"]
+        tower["Learned Tower<br/>(fine-tuned, shared)"]
     end
 
     es --> lex
     es --> sem
+    es --> tower
 
     subgraph online["Online — search-api"]
         direction LR
@@ -77,21 +80,36 @@ flowchart TB
     end
 
     rerank --> rest
+    neural --> rest
+    tower --> rest
 
     subgraph offlineeval["Offline — search-eval"]
         direction LR
-        labels[("label.csv<br/>relevance judgments")] --> evalcli["EvalCli<br/>480 queries × 4 strategies"]
+        labels[("label.csv<br/>relevance judgments")] --> evalcli["EvalCli<br/>480 queries × 6 strategies"]
         evalcli --> results[("RESULTS.md<br/>+ results/*.csv")]
     end
 
     rerank --> evalcli
+    neural --> evalcli
+    tower --> evalcli
 ```
 
-Four ranking strategies, each a `SearchStrategy` implementation:
+Six ranking strategies, each a `SearchStrategy` implementation:
 1. **Lexical** — BM25 (`multi_match` across name/class/category/description/features)
 2. **Semantic** — dense kNN search over `bge-small-en-v1.5` embeddings
 3. **Hybrid** — client-side RRF fusion of the two ranked lists above
 4. **Hybrid + Rerank** — top-50 from Hybrid, rescored by the cross-encoder, top-10 returned
+5. **Neural Rerank** — top-50 from Hybrid, rescored by a small MLP over 6 cheap,
+   mostly-cached features (RRF score, embedding cosine similarity, lexical
+   term overlap, category match, rating, review count) instead of a
+   transformer pass — ~85x faster than the cross-encoder, but scores lower
+   on nDCG@10 than Hybrid alone; see [WRITEUP.md](WRITEUP.md) for the honest
+   account of why
+6. **Learned Tower** — dense kNN search over `bge-small-en-v1.5` fine-tuned
+   on WANDS itself (one shared encoder for both queries and products — beat
+   a two-tower alternative with separate encoders in a head-to-head, but
+   scores lower than the off-the-shelf pretrained model); see
+   [WRITEUP.md](WRITEUP.md) for both findings
 
 ## Roadmap
 
@@ -114,17 +132,42 @@ Four ranking strategies, each a `SearchStrategy` implementation:
       diagram, full write-up.
 - **M6+ — ongoing.**
   - [x] CI-enforced eval — see below.
-  - [ ] Server-side RRF comparison, query understanding, learning-to-rank
-        layer, alternate embedding models, observability.
+  - [x] Feature-based neural reranker (`NeuralRerankStrategy`,
+        `RerankFeatureBuilder`, `ProductFeatureCache`, fifth results row) —
+        trained via `scripts/train-neural-reranker.sh`, evaluated on a
+        held-out 20% query split. Didn't beat Hybrid on nDCG@10; kept as a
+        documented latency/quality tradeoff point, not a replacement for
+        the cross-encoder. See [WRITEUP.md](WRITEUP.md).
+  - [x] Fine-tuned embedding tower comparison (`LearnedTowerSearchStrategy`,
+        sixth results row) — `bge-small-en-v1.5` fine-tuned on WANDS in two
+        configurations (shared encoder vs. true two-tower), compared via
+        `training/train_embedding_towers.py` + the real eval harness on a
+        held-out split. Shared-tower won the head-to-head but neither beat
+        the off-the-shelf pretrained model. See [WRITEUP.md](WRITEUP.md).
+  - [ ] Server-side RRF comparison, query understanding, a pairwise/listwise
+        ranking loss for the neural reranker instead of pointwise MSE, more
+        training data for the tower fine-tune, observability.
+
+See [TRAINING.md](TRAINING.md) for complete setup, process, and results for
+both of this project's own trained models (the feature-based neural
+reranker and the fine-tuned embedding tower comparison).
 
 Target results table (to be filled in as milestones land):
 
 | Strategy | nDCG@10 | MRR | Recall@10 | Recall@50 | Precision@10 | p95 latency |
 |---|---|---|---|---|---|---|
-| Lexical (BM25) | 0.6707 | 0.8793 | 0.0615 | 0.2485 | 0.7942 | 2ms |
-| Semantic (bge-small-en-v1.5) | 0.6990 | 0.8872 | 0.0580 | 0.2303 | 0.7988 | 7ms |
-| Hybrid (RRF, k=60) | 0.7308 | 0.9226 | 0.0638 | 0.2506 | 0.8431 | 8ms |
-| Hybrid + Cross-Encoder Rerank | 0.7456 | 0.9015 | 0.0642 | 0.2506 | 0.8358 | 1288ms |
+| Lexical (BM25) | 0.6694 | 0.8794 | 0.0613 | 0.2482 | 0.7923 | 2ms |
+| Semantic (bge-small-en-v1.5) | 0.6982 | 0.8900 | 0.0579 | 0.2288 | 0.7990 | 5ms |
+| Hybrid (RRF, k=40) | 0.7295 | 0.9202 | 0.0639 | 0.2502 | 0.8450 | 7ms |
+| Hybrid + Cross-Encoder Rerank | 0.7447 | 0.9037 | 0.0642 | 0.2502 | 0.8362 | 1248ms |
+| Neural Rerank (MLP)* | 0.6809 | 0.8555 | 0.0613 | 0.2731 | 0.8021 | 12ms |
+| Learned Tower (fine-tuned, shared)* | 0.6603 | 0.8559 | 0.0559 | 0.2284 | 0.7729 | 6ms |
+
+\* Scored on the held-out 20% of queries only (96 of 480) — see
+[WRITEUP.md](WRITEUP.md) for why these two rows aren't directly comparable
+row-for-row with the other four, and for the honest write-up of why
+neither beats its respective baseline (Hybrid, and off-the-shelf
+`bge-small-en-v1.5`, in order).
 
 See `RESULTS.md` (regenerate with `./scripts/run-eval.sh`) for the
 canonical, always-current version of this table plus per-query CSVs

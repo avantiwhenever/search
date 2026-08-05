@@ -6,11 +6,16 @@ import com.avanti.search.common.WandsCsvLoader;
 import com.avanti.search.common.WandsDataset;
 import com.avanti.search.common.WandsQuery;
 import com.avanti.search.inference.EmbeddingService;
+import com.avanti.search.inference.NeuralRerankerService;
 import com.avanti.search.inference.RerankerService;
 import com.avanti.search.retrieval.ElasticsearchClients;
 import com.avanti.search.retrieval.HybridRerankStrategy;
 import com.avanti.search.retrieval.HybridRrfSearchStrategy;
+import com.avanti.search.retrieval.LearnedTowerSearchStrategy;
 import com.avanti.search.retrieval.LexicalSearchStrategy;
+import com.avanti.search.retrieval.NeuralRerankStrategy;
+import com.avanti.search.retrieval.ProductFeatureCache;
+import com.avanti.search.retrieval.ProductLookup;
 import com.avanti.search.retrieval.RrfFusionService;
 import com.avanti.search.retrieval.ScoredResult;
 import com.avanti.search.retrieval.SearchStrategy;
@@ -24,15 +29,19 @@ import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.UncheckedIOException;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -89,8 +98,17 @@ public class EvalCli implements Callable<Integer> {
     @Option(names = "--reranker-model-dir", description = "Directory containing the reranker's model.onnx/tokenizer.json", defaultValue = "models/ms-marco-MiniLM-L-6-v2")
     private Path rerankerModelDir;
 
+    @Option(names = "--neural-reranker-model-dir", description = "Directory containing the neural reranker's model.onnx (see scripts/train-neural-reranker.sh)", defaultValue = "models/neural-reranker")
+    private Path neuralRerankerModelDir;
+
+    @Option(names = "--learned-tower-model-dir", description = "Directory containing the winning fine-tuned tower's model.onnx (see scripts/train-embedding-tower.sh and TRAINING.md)", defaultValue = "models/learned-shared-tower")
+    private Path learnedTowerModelDir;
+
     @Option(names = "--baseline-file", description = "Optional regression floor (see ci/eval-baseline.json) — if given, exits non-zero when any strategy's nDCG@10 falls below its floor")
     private Path baselineFile;
+
+    private static final int FEATURE_CACHE_MAX_SIZE = 50_000;
+    private static final String HELD_OUT_QUERIES_RESOURCE = "/neural-reranker-eval-queries.txt";
 
     public static void main(String[] args) {
         int exitCode = new CommandLine(new EvalCli()).execute(args);
@@ -107,7 +125,11 @@ public class EvalCli implements Callable<Integer> {
         List<StrategySummary> summaries;
         try (ElasticsearchClient client = ElasticsearchClients.create(host);
              EmbeddingService embeddingService = new EmbeddingService(modelDir);
-             RerankerService rerankerService = new RerankerService(rerankerModelDir)) {
+             RerankerService rerankerService = new RerankerService(rerankerModelDir);
+             NeuralRerankerService neuralRerankerService = new NeuralRerankerService(neuralRerankerModelDir);
+             EmbeddingService learnedTowerEmbeddingService = new EmbeddingService(learnedTowerModelDir)) {
+            ProductFeatureCache featureCache = new ProductFeatureCache(
+                    ids -> ProductLookup.fetchByIds(client, ids), FEATURE_CACHE_MAX_SIZE);
             LexicalSearchStrategy lexical = new LexicalSearchStrategy(client);
             SemanticSearchStrategy semantic = new SemanticSearchStrategy(client, embeddingService);
             List<WandsQuery> latencySample = selectLatencySample(dataset.queries(), LATENCY_SAMPLE_SIZE);
@@ -127,8 +149,24 @@ public class EvalCli implements Callable<Integer> {
             HybridRrfSearchStrategy hybrid = new HybridRrfSearchStrategy(lexical, semantic, TOP_K, bestK);
             summaries.add(evaluate(hybrid, dataset, latencySample));
 
-            HybridRerankStrategy rerank = new HybridRerankStrategy(hybrid, client, rerankerService, TOP_K);
+            HybridRerankStrategy rerank = new HybridRerankStrategy(hybrid, featureCache, rerankerService, TOP_K);
             summaries.add(evaluate(rerank, dataset, latencySample));
+
+            // Scored on the held-out 20% of queries only (see scripts/train-neural-reranker.sh
+            // and scripts/train-embedding-tower.sh) — both these strategies' training data
+            // comes from the other 80%, unlike the four strategies above.
+            WandsDataset heldOutDataset = restrictToHeldOutQueries(dataset);
+            List<WandsQuery> heldOutLatencySample = selectLatencySample(heldOutDataset.queries(), LATENCY_SAMPLE_SIZE);
+
+            NeuralRerankStrategy neuralRerank = new NeuralRerankStrategy(
+                    hybrid, client, embeddingService, neuralRerankerService, featureCache, TOP_K);
+            summaries.add(evaluate(neuralRerank, heldOutDataset, heldOutLatencySample));
+
+            // The shared-tower mode won Track B's head-to-head against a two-tower model on
+            // this same held-out split (0.6594 vs. 0.6468 nDCG@10 — see TRAINING.md) — this is
+            // that winner, wired the same way as any other strategy from here on.
+            LearnedTowerSearchStrategy learnedTower = new LearnedTowerSearchStrategy(client, learnedTowerEmbeddingService);
+            summaries.add(evaluate(learnedTower, heldOutDataset, heldOutLatencySample));
 
             writeResultsMarkdown(summaries, sweep);
         }
@@ -196,6 +234,34 @@ public class EvalCli implements Callable<Integer> {
             latenciesMs.add((System.nanoTime() - start) / 1_000_000);
         }
         return latenciesMs;
+    }
+
+    /**
+     * Filters to the held-out query ids written by
+     * scripts/train-neural-reranker.sh — NeuralRerankStrategy trains on the
+     * other 80%, so scoring it on all 480 (like the other strategies) would
+     * partly measure how well it memorized its own training queries.
+     */
+    private WandsDataset restrictToHeldOutQueries(WandsDataset dataset) {
+        Set<String> heldOutQueryIds = new HashSet<>();
+        try (InputStream in = EvalCli.class.getResourceAsStream(HELD_OUT_QUERIES_RESOURCE)) {
+            if (in == null) {
+                throw new IllegalStateException("Missing " + HELD_OUT_QUERIES_RESOURCE
+                        + " on the classpath — run scripts/train-neural-reranker.sh first");
+            }
+            for (String line : new String(in.readAllBytes(), StandardCharsets.UTF_8).split("\n")) {
+                if (!line.isBlank()) {
+                    heldOutQueryIds.add(line.trim());
+                }
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to read " + HELD_OUT_QUERIES_RESOURCE, e);
+        }
+
+        List<WandsQuery> heldOutQueries = dataset.queries().stream()
+                .filter(q -> heldOutQueryIds.contains(q.queryId()))
+                .toList();
+        return new WandsDataset(dataset.products(), heldOutQueries, dataset.labels(), dataset.judgmentsByQuery());
     }
 
     private static List<WandsQuery> selectLatencySample(List<WandsQuery> queries, int sampleSize) {
@@ -327,6 +393,10 @@ public class EvalCli implements Callable<Integer> {
                     .append(" | ").append(s.p95LatencyMs())
                     .append(" |\n");
         }
+        sb.append("\n_Neural Rerank and Learned Tower each train on 80% of the 480 WANDS queries and are scored ");
+        sb.append("above on only the held-out 20% (see `search-eval/src/main/resources/neural-reranker-eval-queries.txt`) ");
+        sb.append("— their rows aren't on the same query count as the other four. Learned Tower is the shared-tower ");
+        sb.append("mode, which won a head-to-head against a two-tower model on this split — see TRAINING.md._\n");
 
         sb.append("\n## RRF constant sweep\n\n");
         sb.append("Fusion of the same lexical/semantic candidate lists at each k (see `results/rrf-sweep.csv`); ");

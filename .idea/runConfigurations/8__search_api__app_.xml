@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="6. search-api (app)" type="Application" factoryName="Application">
+  <configuration default="false" name="8. search-api (app)" type="Application" factoryName="Application">
     <option name="MAIN_CLASS_NAME" value="com.avanti.search.api.SearchApiApplication" />
     <module name="search-api" />
     <extension name="coverage">
