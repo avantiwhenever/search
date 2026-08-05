@@ -34,6 +34,8 @@ services:
       - SEARCH_ELASTICSEARCH_HOST=http://elasticsearch:9200
       - SEARCH_MODELS_EMBEDDING_DIR=/models/bge-small-en-v1.5
       - SEARCH_MODELS_RERANKER_DIR=/models/ms-marco-MiniLM-L-6-v2
+      - SEARCH_MODELS_NEURAL_RERANKER_DIR=/models/neural-reranker
+      - SEARCH_MODELS_LEARNED_TOWER_DIR=/models/learned-shared-tower
     ports:
       - "8080:8080"
     volumes:

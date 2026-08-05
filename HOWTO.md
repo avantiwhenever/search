@@ -188,10 +188,15 @@ docker compose up -d --build search-api
 Build stage matches the local toolchain (Maven 3.9.16 + JDK 26); runtime is
 a glibc-based JRE image, since ONNX Runtime's and the tokenizer's native
 libraries aren't musl-compatible. This mounts the already-downloaded
-`models/` directory read-only into the container rather than baking ~150MB
-of weights into the image, and points `SEARCH_ELASTICSEARCH_HOST` at the
+`models/` directory read-only into the container rather than baking the
+weights into the image, and points `SEARCH_ELASTICSEARCH_HOST` at the
 `elasticsearch` compose service by name — no extra configuration needed
-beyond having already run `download-models.sh`.
+beyond having already completed steps 2, 4, and 5 above (`models/`
+contains `bge-small-en-v1.5`, `ms-marco-MiniLM-L-6-v2`, `neural-reranker`,
+and `learned-shared-tower`, all four required now that all six strategies
+are wired in — `docker-compose.yml`'s `search-api` service sets a
+`SEARCH_MODELS_*_DIR` env var per model dir, same names `application.yml`
+uses locally).
 
 **Verify:** same as step 7 above — `./scripts/wait-for-search-api.sh`, or
 `docker compose logs -f search-api` and watch for the Spring Boot startup
