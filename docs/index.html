@@ -208,6 +208,27 @@
     text-wrap: balance;
   }
 
+  .name-button {
+    font: inherit;
+    font-weight: 700;
+    font-size: 0.95rem;
+    text-wrap: balance;
+    text-align: left;
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--text);
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-decoration-color: var(--text-muted);
+    text-underline-offset: 3px;
+  }
+  .name-button:hover, .name-button:focus-visible {
+    color: var(--accent);
+    text-decoration-color: var(--accent);
+  }
+
   .column-header .latency {
     color: var(--text-muted);
     font-size: 0.72rem;
@@ -322,6 +343,179 @@
     color: var(--text);
   }
 
+  .glance {
+    margin-top: 2.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .glance h2 {
+    font-size: 1.05rem;
+    margin: 0 0 0.3rem;
+  }
+
+  .glance .glance-sub {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    margin: 0 0 1.1rem;
+  }
+
+  .glance-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem;
+  }
+
+  .glance-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    text-align: left;
+    cursor: pointer;
+    font: inherit;
+    color: inherit;
+  }
+  .glance-card:hover, .glance-card:focus-visible {
+    border-color: var(--accent);
+    outline: none;
+  }
+
+  .glance-card .glance-name {
+    font-weight: 700;
+    font-size: 0.92rem;
+  }
+
+  .glance-card .glance-desc {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    line-height: 1.4;
+    flex: 1 1 auto;
+  }
+
+  .glance-card .glance-metrics {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    font-size: 0.7rem;
+  }
+
+  .glance-metric {
+    background: var(--surface-alt);
+    color: var(--text-muted);
+    border-radius: 6px;
+    padding: 0.15rem 0.45rem;
+  }
+
+  .glance-metric.highlight {
+    background: var(--rank1-bg);
+    color: var(--rank1);
+    font-weight: 700;
+  }
+
+  .glance-card .glance-more {
+    color: var(--accent);
+    font-size: 0.76rem;
+    font-weight: 600;
+  }
+
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 4vh 1rem;
+    overflow-y: auto;
+    z-index: 100;
+  }
+  .modal-overlay[hidden] { display: none; }
+
+  .modal {
+    background: var(--surface);
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    max-width: 640px;
+    width: 100%;
+    padding: 1.5rem;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  }
+
+  .modal-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.9rem;
+  }
+
+  .modal-header h3 {
+    margin: 0;
+    font-size: 1.15rem;
+  }
+
+  .modal-close {
+    flex: 0 0 auto;
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    width: 2rem;
+    height: 2rem;
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+    color: var(--text);
+  }
+  .modal-close:hover { border-color: var(--accent); }
+
+  .modal-tagline {
+    color: var(--text-muted);
+    font-size: 0.88rem;
+    margin: 0 0 1rem;
+    line-height: 1.5;
+  }
+
+  .modal h4 {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    margin: 1.1rem 0 0.5rem;
+  }
+
+  .modal p {
+    font-size: 0.88rem;
+    line-height: 1.55;
+    margin: 0;
+  }
+
+  .modal-metrics-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+  }
+  .modal-metrics-table th, .modal-metrics-table td {
+    text-align: left;
+    padding: 0.4rem 0.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .modal-metrics-table th {
+    color: var(--text-muted);
+    font-weight: 600;
+  }
+  .modal-metrics-table td.mono { font-variant-numeric: tabular-nums; }
+
+  .modal-note {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+    margin: 0.6rem 0 0;
+  }
+
   footer {
     padding: 1.5rem;
     text-align: center;
@@ -351,7 +545,36 @@
     <div class="columns" id="columns"></div>
   </div>
   <p class="pick-note" id="pick-note" hidden>Click "This looks best" under whichever column you'd pick — it's just for you, nothing is saved or sent anywhere.</p>
+
+  <section class="glance">
+    <h2>Six strategies, at a glance</h2>
+    <p class="glance-sub">Same 480 real WANDS queries, same catalog, same offline metrics for every row. Click any card — or any column name above — for how it works and the full numbers.</p>
+    <div class="glance-grid" id="glance-grid"></div>
+  </section>
 </main>
+<div class="modal-overlay" id="modal-overlay" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-header">
+      <h3 id="modal-title"></h3>
+      <button type="button" class="modal-close" id="modal-close" aria-label="Close">✕</button>
+    </div>
+    <p class="modal-tagline" id="modal-tagline"></p>
+    <h4>How it works</h4>
+    <p id="modal-how"></p>
+    <h4>Offline evaluation (WANDS, 480 queries)</h4>
+    <table class="modal-metrics-table">
+      <thead>
+        <tr><th>nDCG@10</th><th>MRR</th><th>Recall@10</th><th>Recall@50</th><th>Precision@10</th><th>p95 latency</th></tr>
+      </thead>
+      <tbody>
+        <tr id="modal-metrics-row"></tr>
+      </tbody>
+    </table>
+    <h4>Honest take</h4>
+    <p id="modal-honest"></p>
+    <p class="modal-note" id="modal-note"></p>
+  </div>
+</div>
 <footer>
   Six ranking strategies, same query, same catalog: Lexical (BM25) → Semantic (dense kNN) → Hybrid (RRF fusion) → Hybrid + Cross-Encoder Rerank → Neural Rerank (MLP) → Learned Tower (fine-tuned).
   Source, offline evaluation methodology (nDCG@10/MRR/Recall/Precision against 480 real WANDS queries), and the live demo app are all in the
@@ -626,12 +849,60 @@
   const selectEl = document.getElementById('query-select');
 
   const STRATEGY_INFO = [
-    { match: 'lexical', description: 'Exact keyword matching (BM25) — finds products containing your literal words.', ndcg: 0.6707 },
-    { match: 'semantic', description: 'Dense vector search — finds conceptually similar products even without matching words.', ndcg: 0.6990 },
-    { match: 'neural', description: 'Small MLP re-scores the hybrid results from 6 cheap features (RRF score, embedding similarity, term overlap, rating, ...) — ~85x faster than the cross-encoder, but scores lower on nDCG@10 than Hybrid alone on held-out queries. A real, documented tradeoff, not a win.', ndcg: 0.6789 },
-    { match: 'rerank', description: 'Cross-encoder re-scores the hybrid results by reading your query against each product directly. Highest quality, most latency.', ndcg: 0.7456 },
-    { match: 'hybrid', description: 'Combines the lexical and semantic rankings above via Reciprocal Rank Fusion.', ndcg: 0.7308 },
-    { match: 'tower', description: 'bge-small-en-v1.5 fine-tuned on WANDS itself (a shared encoder for both queries and products — beat a two-tower alternative with separate encoders in a head-to-head). Scores lower than the off-the-shelf model on held-out queries — another honest negative result, documented rather than hidden.', ndcg: 0.6594 },
+    {
+      match: 'lexical',
+      description: 'Exact keyword matching (BM25) — finds products containing your literal words.',
+      ndcg: 0.6707,
+      tagline: 'The baseline every other stage has to beat: pure keyword matching, no embeddings involved.',
+      how: 'Elasticsearch multi_match with BM25 scoring across product name, class, category hierarchy, description, and features. No model, no vectors — just term frequency and inverse document frequency over the literal words in your query. Fast because there’s nothing to compute beyond an inverted-index lookup.',
+      metrics: { ndcg: '0.6707', mrr: '0.8793', recall10: '0.0615', recall50: '0.2485', precision10: '0.7942', p95: '2ms' },
+      honest: 'A surprisingly strong baseline — BM25 nails exact-term queries and is nearly free. It loses when the query and the product description don’t share vocabulary (“cozy reading chair” vs. a product titled “accent armchair”), which is exactly the gap semantic search is built to close.',
+    },
+    {
+      match: 'semantic',
+      description: 'Dense vector search — finds conceptually similar products even without matching words.',
+      ndcg: 0.6990,
+      tagline: 'Dense kNN over sentence embeddings — matches on meaning, not shared vocabulary.',
+      how: 'Every product is embedded once at index time with bge-small-en-v1.5 (CLS-token pooling, not mean-pooling — a detail that silently degrades results if you get it wrong) and stored as a dense_vector in Elasticsearch. Queries get the same model plus BGE’s asymmetric query prefix, then it’s a kNN cosine-similarity search. Runs fully in-process via ONNX Runtime, no Python server.',
+      metrics: { ndcg: '0.6990', mrr: '0.8872', recall10: '0.0580', recall50: '0.2303', precision10: '0.7988', p95: '7ms' },
+      honest: 'Beats lexical on nDCG@10, but Recall@50 is actually lower (0.2303 vs 0.2485) — the first sign that lexical and semantic are making different kinds of mistakes, not weaker/stronger versions of the same one. That’s the case for fusing them instead of picking one.',
+    },
+    {
+      match: 'neural',
+      description: 'Small MLP re-scores the hybrid results from 6 cheap features (RRF score, embedding similarity, term overlap, rating, ...) — ~85x faster than the cross-encoder, but scores lower on nDCG@10 than Hybrid alone on held-out queries. A real, documented tradeoff, not a win.',
+      ndcg: 0.6789,
+      tagline: 'A tiny MLP trying to buy back most of the cross-encoder’s quality for a fraction of its latency. Documented here because it didn’t work, not because it did.',
+      how: 'Linear(6,8) → ReLU → Linear(8,1) rescoring Hybrid’s top-50 candidates from 6 cheap features: the Hybrid RRF score, query–product embedding cosine similarity, exact lexical term-overlap fraction, a category-match flag, average rating, and log1p(review count). Trained in Python on WANDS relevance grades with MSE loss, exported to ONNX, served through the same in-process runtime as the other models.',
+      metrics: { ndcg: '0.6789', mrr: '0.8645', recall10: '0.0622', recall50: '0.2729', precision10: '0.8052', p95: '15ms' },
+      honest: 'A real negative result: at ~15ms it’s ~85x faster than the cross-encoder and about as fast as Hybrid itself, but its nDCG@10 (0.6789) is below Hybrid’s own (0.7308) — the learned reranker’s reordering is actively worse than leaving Hybrid’s ranking alone. Kept in the demo anyway: proving an idea doesn’t work, and having the numbers to show why, is the point. Best guesses why: an MSE calibration objective instead of a ranking loss, only 6 scalar features vs. a cross-encoder’s full joint attention, and WANDS’s label imbalance. Scored on a held-out 20% split (96 queries) the model never trained on.',
+    },
+    {
+      match: 'rerank',
+      description: 'Cross-encoder re-scores the hybrid results by reading your query against each product directly. Highest quality, most latency.',
+      ndcg: 0.7456,
+      tagline: 'A cross-encoder reads the query against each candidate product directly — the highest-quality stage, and the most expensive.',
+      how: 'ms-marco-MiniLM-L-6-v2 (INT8-quantized ONNX export) rescoring Hybrid’s top-50 candidates: unlike the embedding model, the query and product text go through the transformer together in one forward pass per pair, which is why it’s both more accurate and far slower. Pinned to a single intra-op thread and gated by a semaphore sized to core count, so concurrent API requests share the CPU instead of each spawning a full-width thread pool.',
+      metrics: { ndcg: '0.7456', mrr: '0.9015', recall10: '0.0642', recall50: '0.2506', precision10: '0.8358', p95: '1288ms' },
+      honest: 'Best nDCG@10 of all six strategies, but not a strict win: MRR and Precision@10 both dip slightly versus Hybrid alone (0.9015 vs 0.9226, 0.8358 vs 0.8431) even as nDCG@10 improves — a plausible, real effect (the cross-encoder occasionally reorders a near-tied exact match below a more topically-relevant result). A genuine cost/quality tradeoff against ~1.3s p95 latency, not a free upgrade.',
+    },
+    {
+      match: 'hybrid',
+      description: 'Combines the lexical and semantic rankings above via Reciprocal Rank Fusion.',
+      ndcg: 0.7308,
+      tagline: 'Reciprocal Rank Fusion of the lexical and semantic ranked lists — cheap, and clearly ahead of either alone.',
+      how: 'Hand-rolled client-side RRF (not Elasticsearch’s built-in fusion) so the eval harness can sweep the fusion constant k directly against offline metrics instead of trusting a textbook default. The sweep from k=40 to k=200 turned out flat (nDCG@10 between 0.7302 and 0.7308), with k=60 — the standard default — sitting right at the empirical peak.',
+      metrics: { ndcg: '0.7308', mrr: '0.9226', recall10: '0.0638', recall50: '0.2506', precision10: '0.8431', p95: '8ms' },
+      honest: 'Clearly ahead of both lexical and semantic alone on every metric, and recovers the Recall@50 that semantic gave up (0.2506 vs semantic’s 0.2303) — exactly what fusing two differently-wrong signals should do. All this for ~8ms: pure in-memory arithmetic over two candidate lists already fetched.',
+    },
+    {
+      match: 'tower',
+      description: 'bge-small-en-v1.5 fine-tuned on WANDS itself (a shared encoder for both queries and products — beat a two-tower alternative with separate encoders in a head-to-head). Scores lower than the off-the-shelf model on held-out queries — another honest negative result, documented rather than hidden.',
+      ndcg: 0.6594,
+      tagline: 'bge-small-en-v1.5 fine-tuned on WANDS itself, as a single shared encoder. Documented here because it, too, came up short of the off-the-shelf model.',
+      how: 'Fine-tuned with pairwise margin-ranking loss on 5,404 triplets built from the training-query split, then exported to ONNX and served the same way as the base Semantic strategy. One shared encoder embeds both queries and products (as opposed to a true two-tower model with separate encoders, which this beat head-to-head on every metric in the same experiment).',
+      metrics: { ndcg: '0.6594', mrr: '0.8753', recall10: '0.0559', recall50: '0.2279', precision10: '0.7719', p95: '~6ms' },
+      honest: 'Another honest negative result: this fine-tune scores below the off-the-shelf bge-small-en-v1.5 (0.6594 vs 0.6990 nDCG@10) on the same held-out queries. 5,404 triplets over 2 epochs is a small amount of task-specific fine-tuning next to the base model’s original large-scale pretraining — plausibly enough to erode general representation quality faster than it adds task-specific signal. It did clearly beat a two-tower variant (separate query/product encoders) in the same experiment, which is the one clean positive finding here. Scored on the same held-out 96-query split as Neural Rerank.',
+    },
   ];
 
   function strategyInfo(name) {
@@ -668,7 +939,7 @@
       <div class="column" data-strategy="${escapeHtml(strategyName)}">
         <div class="column-header">
           <div class="name-row">
-            <div class="name">${escapeHtml(strategyName)}</div>
+            <button type="button" class="name-button" data-strategy-open="${escapeHtml(strategyName)}">${escapeHtml(strategyName)}</button>
             <div class="latency mono">${latencyMs}ms</div>
           </div>
           <div class="description">${escapeHtml(info.description)}</div>
@@ -695,6 +966,75 @@
     });
   }
 
+  function wireStrategyOpenButtons() {
+    columnsEl.querySelectorAll('[data-strategy-open]').forEach((btn) => {
+      btn.addEventListener('click', () => openModal(btn.getAttribute('data-strategy-open')));
+    });
+  }
+
+  // --- Strategy detail modal ---
+  const modalOverlay = document.getElementById('modal-overlay');
+  const modalTitle = document.getElementById('modal-title');
+  const modalTagline = document.getElementById('modal-tagline');
+  const modalHow = document.getElementById('modal-how');
+  const modalMetricsRow = document.getElementById('modal-metrics-row');
+  const modalHonest = document.getElementById('modal-honest');
+  const modalNote = document.getElementById('modal-note');
+  const modalCloseBtn = document.getElementById('modal-close');
+  let lastFocusedEl = null;
+
+  function openModal(strategyName) {
+    const info = strategyInfo(strategyName);
+    lastFocusedEl = document.activeElement;
+    modalTitle.textContent = strategyName;
+    modalTagline.textContent = info.tagline ?? info.description ?? '';
+    modalHow.textContent = info.how ?? '';
+    modalHonest.textContent = info.honest ?? '';
+    const m = info.metrics ?? {};
+    modalMetricsRow.innerHTML = ['ndcg', 'mrr', 'recall10', 'recall50', 'precision10', 'p95']
+      .map((key) => `<td class="mono">${escapeHtml(m[key] ?? '—')}</td>`).join('');
+    modalNote.textContent = 'Metrics from the full offline eval harness (nDCG@10/MRR/Recall/Precision) against WANDS relevance judgments — see WRITEUP.md and RESULTS.md in the repo for the complete methodology.';
+    modalOverlay.hidden = false;
+    modalCloseBtn.focus();
+  }
+
+  function closeModal() {
+    modalOverlay.hidden = true;
+    if (lastFocusedEl) lastFocusedEl.focus();
+  }
+
+  modalCloseBtn.addEventListener('click', closeModal);
+  modalOverlay.addEventListener('click', (e) => {
+    if (e.target === modalOverlay) closeModal();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !modalOverlay.hidden) closeModal();
+  });
+
+  // --- Strategies-at-a-glance section (static, independent of selected query) ---
+  function renderGlance() {
+    const grid = document.getElementById('glance-grid');
+    grid.innerHTML = STRATEGY_INFO.map((s) => {
+      const name = QUERY_DATA[Object.keys(QUERY_DATA)[0]]
+        ? Object.keys(QUERY_DATA[Object.keys(QUERY_DATA)[0]].resultsByStrategy).find((n) => n.toLowerCase().includes(s.match))
+        : s.match;
+      const label = name ?? s.match;
+      return `
+        <button type="button" class="glance-card" data-strategy-open="${escapeHtml(label)}">
+          <div class="glance-name">${escapeHtml(label)}</div>
+          <div class="glance-desc">${escapeHtml(s.description)}</div>
+          <div class="glance-metrics">
+            <span class="glance-metric highlight">nDCG@10 ${s.ndcg.toFixed(4)}</span>
+            <span class="glance-metric">p95 ${escapeHtml(s.metrics.p95)}</span>
+          </div>
+          <div class="glance-more">View details →</div>
+        </button>`;
+    }).join('');
+    grid.querySelectorAll('[data-strategy-open]').forEach((btn) => {
+      btn.addEventListener('click', () => openModal(btn.getAttribute('data-strategy-open')));
+    });
+  }
+
   function renderQuery(query) {
     const data = QUERY_DATA[query];
     pickNoteEl.hidden = true;
@@ -702,6 +1042,7 @@
       .map(([name, strategyResult]) => renderColumn(name, strategyResult))
       .join('');
     wirePickButtons();
+    wireStrategyOpenButtons();
     pickNoteEl.hidden = false;
     statusEl.textContent = `"${query}" — per-column latency and result count shown above`;
   }
@@ -714,6 +1055,7 @@
   });
   selectEl.addEventListener('change', () => renderQuery(selectEl.value));
   renderQuery(selectEl.value);
+  renderGlance();
 </script>
 </body>
 </html>
