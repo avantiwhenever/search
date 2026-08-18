@@ -175,11 +175,32 @@ under `results/`.
 
 ## CI
 
-One GitHub Actions workflow:
+One GitHub Actions workflow, `.github/workflows/build.yml`, six jobs on every push/PR:
 
-- **`.github/workflows/build.yml`** — `mvn test` on every push/PR. Fast,
-  needs no Elasticsearch or models (the tests that do need them skip
-  gracefully via `Assumptions.assumeTrue` when those aren't present).
+- **`test`** — `mvn test`. Fast, needs no Elasticsearch or models (the
+  tests that do need them skip gracefully via `Assumptions.assumeTrue`
+  when those aren't present).
+- **`cve-scan`** — Trivy against every module's resolved `pom.xml`
+  dependency tree (SCA), failing on CRITICAL/HIGH/MEDIUM known CVEs.
+  Reproduce locally with `./scripts/scan-cves.sh`.
+- **`sast`** — Semgrep over the Java (and Python training) source itself
+  — not just its dependencies — with the `p/java`, `p/security-audit`,
+  and `p/secrets` rulesets.
+- **`secret-scan`** — gitleaks against the full commit history, so a
+  credential can't slip in and get baked into an image layer later.
+- **`docker-lint`** — hadolint against `search-api/Dockerfile` (this is
+  what caught that the non-root `USER` directive should be numeric
+  `1000:1000`, not a name, for portability to orchestrators that don't
+  read `/etc/passwd`).
+- **`docker-image-scan`** — builds the real `search-api` runtime image
+  and scans it (OS + JRE layer, not just the jar's dependencies) with
+  Trivy, plus generates a CycloneDX SBOM as a build artifact via Syft.
+
+Deliberately **not** in this pipeline: Cosign image signing and registry
+immutability controls. Those protect a *registry* this project doesn't
+have — there's no ECR/Harbor push step, so wiring up signing would be
+config theater, not a real control. Worth adding the day this project
+(or reader's fork of it) actually pushes images somewhere.
 
 The full-catalog regression eval (ingest all ~43K products with real
 embeddings, run all 480 WANDS queries against all four strategies, fail if

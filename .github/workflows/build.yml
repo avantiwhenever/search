@@ -27,3 +27,74 @@ jobs:
 
       - name: Run unit tests
         run: mvn -B test
+
+  # --- Software Composition Analysis: known CVEs in resolved Maven dependencies ---
+  cve-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan Maven dependencies for known CVEs
+        uses: aquasecurity/trivy-action@0.36.0
+        with:
+          scan-type: fs
+          scanners: vuln
+          scan-ref: .
+          severity: CRITICAL,HIGH,MEDIUM
+          exit-code: '1'
+          format: table
+
+  # --- SAST: Java source, not just its dependencies ---
+  sast:
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Semgrep (Java security rules)
+        run: semgrep scan --config p/java --config p/security-audit --config p/secrets --metrics=off --error
+
+  # --- Secret detection: block committed credentials before they land in an image layer ---
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v3
+
+  # --- Dockerfile lint: catch misconfigurations (missing USER, unpinned base, etc.) ---
+  docker-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hadolint/hadolint-action@v3.4.0
+        with:
+          dockerfile: search-api/Dockerfile
+
+  # --- Build the real runtime image and scan it for OS/JRE-level CVEs before it
+  #     would ever reach a registry. ---
+  docker-image-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build search-api image
+        run: docker build -f search-api/Dockerfile -t search-api:${{ github.sha }} .
+
+      - name: Scan image for OS/JRE CVEs
+        uses: aquasecurity/trivy-action@0.36.0
+        with:
+          scan-type: image
+          image-ref: search-api:${{ github.sha }}
+          scanners: vuln
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+          format: table
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0.24.0
+        with:
+          image: search-api:${{ github.sha }}
+          format: cyclonedx-json
+          artifact-name: search-api-sbom.cyclonedx.json

@@ -20,7 +20,11 @@ RUN mvn -q -B -pl search-api -am package -DskipTests
 # Runtime stage: JRE only, glibc-based (jammy, not alpine) — ONNX Runtime's
 # and the tokenizers JNI binding's native libraries are glibc-linked.
 FROM eclipse-temurin:26-jre-jammy
+RUN groupadd --system --gid 1000 search && \
+    useradd --system --uid 1000 --gid search --no-create-home search
 WORKDIR /app
 COPY --from=build /workspace/search-api/target/search-api.jar app.jar
+RUN chown search:search /app/app.jar
+USER 1000:1000
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "app.jar"]
