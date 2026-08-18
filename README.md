@@ -196,6 +196,22 @@ One GitHub Actions workflow, `.github/workflows/build.yml`, six jobs on every pu
   and scans it (OS + JRE layer, not just the jar's dependencies) with
   Trivy, plus generates a CycloneDX SBOM as a build artifact via Syft.
 
+`cve-scan`, `sast`, and `docker-image-scan` each run their scanner twice:
+once in the format that gates the job (`table` + `exit-code: 1`), once as
+SARIF uploaded via `github/codeql-action/upload-sarif` so findings also
+land in the repo's **Security → Code scanning** tab instead of only
+CI logs — non-blocking, so a SARIF upload hiccup never fails the job.
+
+Repo-level (not workflow files, so not visible in `.github/`, but part of
+the same posture): **Dependabot version updates** (`.github/dependabot.yml`
+— weekly, covering the Maven reactor, `search-api/Dockerfile`, and the
+Actions workflow itself), plus **Dependabot alerts**, **Dependabot
+security updates**, **secret scanning**, and **secret scanning push
+protection** all enabled in repo settings — free for a public repo, and
+the platform-native complement to the gitleaks/Trivy checks above (push
+protection in particular blocks a secret *before* it's pushed, which a
+CI-time scan structurally can't).
+
 Deliberately **not** in this pipeline: Cosign image signing and registry
 immutability controls. Those protect a *registry* this project doesn't
 have — there's no ECR/Harbor push step, so wiring up signing would be
