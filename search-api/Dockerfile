@@ -1,5 +1,5 @@
 # Build stage: matches the local toolchain (Maven 3.9.16, JDK 26) exactly.
-FROM maven:3.9.16-eclipse-temurin-26 AS build
+FROM maven:3-eclipse-temurin-24 AS build
 WORKDIR /workspace
 
 COPY pom.xml .
