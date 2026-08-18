@@ -5,7 +5,10 @@ set -euo pipefail
 # against a locally-running search-api (see README's "Local setup"), writing
 # one JSON file per query into docs/data/. These captures are what's baked
 # into docs/index.html's QUERY_DATA block for the static GitHub Pages demo —
-# after running this, regenerate that block by hand from the new JSON files.
+# after running this, regenerate that block by hand from the new JSON files,
+# then run scripts/extract-product-details.py to refresh the per-result
+# "why was this shown" product data (docs/data/product-details.json / the
+# PRODUCT_DETAILS block) to match.
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DATA_DIR="${ROOT_DIR}/docs/data"

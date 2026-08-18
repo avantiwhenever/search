@@ -263,6 +263,14 @@ an argument — the shared config above is fixed to `shared` (the winning,
 actually-deployed mode); there's no dedicated config for training
 `two-tower` since it's optional/already-compared (see the section above).
 
+After step 7, `scripts/extract-product-details.py` pulls the full WANDS
+`product.csv` record (description, structured attributes, rating) for
+every product referenced in the freshly-captured `docs/data/q*.json`,
+writing `docs/data/product-details.json` — this is what backs the
+per-result "why was this shown" detail modal on the demo page. No
+run config for it; it's a plain read of `dataset/product.csv` plus the
+`docs/data/q*.json` files already on disk, no running services needed.
+
 ## Elasticsearch security note
 
 Elasticsearch runs with security disabled (`xpack.security.enabled=false`)
