@@ -598,3 +598,13 @@
     font-size: 0.8rem;
     border-top: 1px solid var(--border);
   }
+
+  .visit-counter {
+    margin-top: 0.9rem;
+    display: flex;
+    justify-content: center;
+  }
+  .visit-counter img {
+    height: 20px;
+    border-radius: 4px;
+  }
