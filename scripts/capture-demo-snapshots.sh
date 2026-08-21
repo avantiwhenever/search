@@ -20,6 +20,10 @@ QUERIES=(
   "cozy reading chair for small apartment"
   "modern oak dining table"
   "outdoor patio furniture set"
+  "small space storage ottoman"
+  "kids bunk bed with stairs"
+  "farmhouse dining bench"
+  "velvet accent chair"
 )
 
 mkdir -p "${DATA_DIR}"
