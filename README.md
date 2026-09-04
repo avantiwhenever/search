@@ -1,4 +1,4 @@
-# Semantic Product Search
+# Vector Search & Neural Network search with Wayfair's open source product dataset
 
 A Java service for semantic product search over the [WANDS](https://github.com/wayfair/WANDS)
 (Wayfair) furniture catalog. Built as a long-term portfolio project focused on one
