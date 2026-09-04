@@ -1,22 +1,122 @@
-# Vector Search & Neural Network search with Wayfair's open source product dataset
+# Semantic Product Search
 
 A Java service for semantic product search over the [WANDS](https://github.com/wayfair/WANDS)
 (Wayfair) furniture catalog. Built as a long-term portfolio project focused on one
 thing: **retrieval and ranking quality** — hybrid lexical/semantic search plus
 cross-encoder reranking, proven with real offline IR evaluation (nDCG, MRR,
-Recall@k) rather than eyeballed results.
+Recall@k) rather than eyeballed results. Sibling portfolio project to
+[`recommendation-engine`](https://github.com/avantiwhenever/recommendation-engine)
+(a React + GraphQL recommendation engine over the same catalog) — that one
+explores a different problem (personalized re-ranking) and a more
+service-oriented stack; this one goes deep on one thing instead: proving each
+stage of a ranking pipeline actually improves search quality, with the
+numbers to back it up.
 
-**[Live snapshot demo →](https://avantiwhenever.github.io/search/)** — a
-few real, captured queries comparing all four strategies side by side
-(static GitHub Pages page, not a live backend — see [WRITEUP.md](WRITEUP.md)
-for the full narrative, or run it yourself locally per [HOWTO.md](HOWTO.md)).
+> **[Live snapshot demo →](https://avantiwhenever.github.io/search/)** — a
+> few real, captured queries comparing all six strategies side by side
+> (static GitHub Pages page, not a live backend — [run it yourself](HOWTO.md)
+> for the real thing, or see [WRITEUP.md](WRITEUP.md) for the full narrative).
+
+## Reading this README
+
+This page serves a few different readers. Pick the path that fits — each is
+short and self-contained, no need to read the others first.
+
+<details>
+<summary><strong>I'm a recruiter / skimming this — what is it? (30 seconds)</strong></summary>
+
+A working, from-scratch Java search engine over a real 43,000-product
+furniture catalog, offering six selectable ranking strategies — from plain
+keyword search up to a cross-encoder reranker and a fine-tuned neural
+embedding model — with real precision/recall numbers proving which ones
+actually work better, not just a demo that "looks reasonable." All
+inference (embeddings, reranking) runs in-process via ONNX Runtime — no
+Python inference server anywhere. It's paired with a sibling project,
+[`recommendation-engine`](https://github.com/avantiwhenever/recommendation-engine),
+which takes a more service-oriented approach to a related problem over the
+same catalog. [See the live snapshot demo →](https://avantiwhenever.github.io/search/)
+
+</details>
+
+<details>
+<summary><strong>I'm curious about the ranking strategies specifically</strong></summary>
+
+Six strategies, each documented below with how it works, plus its real
+offline-evaluation numbers in the results table further down — see
+[RESULTS.md](RESULTS.md) for the raw per-query CSVs and methodology, and
+[WRITEUP.md](WRITEUP.md) for the honest narrative of what beat what (and,
+just as importantly, what didn't).
+
+</details>
+
+<details>
+<summary><strong>I'm a technical hiring manager — what does this actually demonstrate? (2 minutes)</strong></summary>
+
+Concrete, verifiable engineering signal, not a tutorial-follow-along project:
+
+- **Rigorous, not eyeballed, evaluation**: every ranking stage is scored
+  against WANDS' real human relevance judgments (nDCG, MRR, Recall@k,
+  Precision@k) plus measured p95 latency — a full results table with
+  per-query CSVs, not a handful of cherry-picked examples. See
+  [RESULTS.md](RESULTS.md).
+- **Two models trained from scratch, with honest reporting**: a
+  feature-based MLP reranker and a fine-tuned embedding tower (see
+  [TRAINING.md](TRAINING.md)) — both evaluated on a held-out query split,
+  and reported honestly even where they *didn't* beat their baseline. See
+  [WRITEUP.md](WRITEUP.md).
+- **All-Java ML serving, no Python inference server**: embeddings and
+  cross-encoder reranking both run in-process via ONNX Runtime plus a
+  native Rust tokenizer binding — a deliberate differentiator, since most
+  semantic-search portfolios are Python end to end.
+- **Production-adjacent engineering hygiene**: CI with dependency/image
+  vulnerability scanning (Trivy), SAST (Semgrep), secret scanning
+  (gitleaks) and push protection, Dependabot, a CI-run test suite, and a
+  documented Docker-first local setup — see CI below.
+
+</details>
+
+<details>
+<summary><strong>I'm reviewing this codebase — where do I start?</strong></summary>
+
+Start with the Architecture section below for the module layout and the
+data-flow diagram, then [WRITEUP.md](WRITEUP.md) for the narrative of what
+was tried at each milestone, what broke, and how the final numbers were
+arrived at — it's the closest thing this project has to a reviewer's tour.
+[HOWTO.md](HOWTO.md) gets it running locally, with a verification step
+after each stage.
+
+</details>
 
 ## Why this project
 
-Most semantic-search portfolios are thin wrappers around a vector DB with no
-evaluation story. This one is built to demonstrate the opposite: that each
-stage of the ranking pipeline (lexical → semantic → hybrid → reranked)
-measurably improves search quality, with the numbers to back it up.
+Most semantic-search portfolios are a thin wrapper around a vector DB with
+no evaluation story. This one is built to demonstrate a few things most
+such projects skip:
+
+1. **That each stage of the pipeline earns its keep, provably** —
+   lexical → semantic → hybrid → reranked → neural → fine-tuned tower —
+   measured against WANDS' real human relevance judgments at every step,
+   not just at the end.
+2. **Two models trained from scratch on this project's own data** (a
+   feature-based MLP reranker, and a fine-tuned embedding tower), reported
+   honestly including the ones that didn't beat their baseline — see
+   [WRITEUP.md](WRITEUP.md).
+3. **All-Java ML inference** — ONNX Runtime plus a native tokenizer
+   binding, no Python serving path — a deliberate differentiator, since
+   most semantic-search demos are Python end to end.
+4. **Production-adjacent CI/security posture** (CVE scanning, SAST, secret
+   scanning, Dependabot) that's uncommon at portfolio scale.
+
+**The honest tradeoff**: six competing ranking strategies plus a
+from-scratch fine-tuned embedding tower is more machinery than a
+43,000-product, single-tenant, no-real-traffic system actually needs in
+production. This is here to demonstrate IR-evaluation rigor and Java-native
+ML serving competency on purpose, not because this catalog size needs six
+strategies live at once. A system this size built to actually ship would
+likely keep just the best-measured strategy or two (Hybrid, or Hybrid +
+Rerank if the latency budget allows) rather than all six — the eval
+harness's job is precisely to make that kind of call defensible with
+numbers instead of guesswork.
 
 ## Key decisions
 
@@ -152,7 +252,12 @@ See [TRAINING.md](TRAINING.md) for complete setup, process, and results for
 both of this project's own trained models (the feature-based neural
 reranker and the fine-tuned embedding tower comparison).
 
-Target results table (to be filled in as milestones land):
+## Offline evaluation
+
+Every strategy is scored against WANDS' real human relevance judgments
+across 480 queries (nDCG@10, MRR, Recall@10/50, Precision@10), plus
+measured p95 latency — not a single flattering metric, and not eyeballed
+examples. Target results table (filled in as milestones landed):
 
 | Strategy | nDCG@10 | MRR | Recall@10 | Recall@50 | Precision@10 | p95 latency |
 |---|---|---|---|---|---|---|
@@ -169,8 +274,8 @@ row-for-row with the other four, and for the honest write-up of why
 neither beats its respective baseline (Hybrid, and off-the-shelf
 `bge-small-en-v1.5`, in order).
 
-See `RESULTS.md` (regenerate with `./scripts/run-eval.sh`) for the
-canonical, always-current version of this table plus per-query CSVs
+See [RESULTS.md](RESULTS.md) (regenerate with `./scripts/run-eval.sh`) for
+the canonical, always-current version of this table plus per-query CSVs
 under `results/`.
 
 ## CI
@@ -268,5 +373,10 @@ step includes how to verify it actually worked before moving to the next
 one (e.g. confirming `search-api` is up and pollable on `localhost:8080`),
 plus how to run everything via Docker Compose or from IntelliJ.
 
-See [WRITEUP.md](WRITEUP.md) for the full narrative: what was tried at each
-milestone, what broke, and how the final numbers were arrived at.
+## Reviewing this code
+
+See **[WRITEUP.md](WRITEUP.md)** for the full narrative: what was tried at
+each milestone, what broke, and how the final numbers were arrived at — the
+closest thing this project has to a reviewer's tour. Come back to this
+README for the "why" behind specific decisions (Key decisions table above)
+and [HOWTO.md](HOWTO.md) to actually run it.
