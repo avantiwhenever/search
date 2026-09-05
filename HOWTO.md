@@ -142,8 +142,8 @@ documents).
 
 Writes `RESULTS.md` and per-strategy CSVs under `results/`. Add
 `--baseline-file ci/eval-baseline.json` to gate against the same regression
-floor CI used to enforce (see [README's CI section](README.md#ci) — this
-eval is no longer run in CI itself, only locally).
+floor CI used to enforce (see [CI.md](CI.md) — this eval is no longer run
+in CI itself, only locally).
 
 **Verify:** exits 0 and prints `All 6 strategies met their baseline floor`
 when given `--baseline-file`; otherwise just check `RESULTS.md` was written.
@@ -280,7 +280,8 @@ for local dev simplicity — not for production use.
 
 See [WRITEUP.md](WRITEUP.md) for the full narrative: what was tried at each
 milestone, what broke, and how the final numbers were arrived at. See
-[README.md](README.md) for architecture, key decisions, and CI. See
+[ARCHITECTURE.md](ARCHITECTURE.md) for module layout and key decisions, and
+[CI.md](CI.md) for the pipeline/security posture. See
 [TRAINING.md](TRAINING.md) for complete setup, process, and results for
 this project's own trained models (the neural reranker and the fine-tuned
 embedding towers).
