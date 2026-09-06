@@ -43,6 +43,7 @@ models.
 |---|---|
 | [WRITEUP.md](WRITEUP.md) | Long-form narrative: what was tried at each milestone, what broke, and how the final numbers were arrived at |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Module layout, data-flow diagram, the six ranking strategies, key design decisions, implementation notes |
+| [ROADMAP.md](ROADMAP.md) | Milestone-by-milestone checklist — what's done, in progress, and next |
 | [RESULTS.md](RESULTS.md) | Canonical, always-current evaluation numbers (regenerate with `./scripts/run-eval.sh`) |
 | [TRAINING.md](TRAINING.md) | Setup, process, and results for this project's two custom-trained models |
 | [CI.md](CI.md) | The CI pipeline and security posture (CVE/secret scanning, SAST, Dependabot) |

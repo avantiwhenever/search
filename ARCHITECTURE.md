@@ -134,6 +134,7 @@ each spawning their own full-width thread pool and thrashing it.
 ## See also
 
 - [WRITEUP.md](WRITEUP.md) — the narrative: what was tried, what broke, what the numbers showed
+- [ROADMAP.md](ROADMAP.md) — milestone-by-milestone checklist
 - [RESULTS.md](RESULTS.md) — the canonical, always-current evaluation numbers
 - [TRAINING.md](TRAINING.md) — the two custom-trained models
 - [CI.md](CI.md) — the CI pipeline and security posture
